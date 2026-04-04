@@ -1,33 +1,22 @@
 import type { NextAuthOptions } from 'next-auth'
-import CredentialsProvider from 'next-auth/providers/credentials'
+import GoogleProvider from 'next-auth/providers/google'
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    CredentialsProvider({
-      name: 'Credentials',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Пароль', type: 'password' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
-
-        const adminEmail = process.env.ADMIN_EMAIL
-        const adminPassword = process.env.ADMIN_PASSWORD
-
-        if (
-          credentials.email === adminEmail &&
-          credentials.password === adminPassword
-        ) {
-          return { id: '1', email: adminEmail, name: 'Admin' }
-        }
-
-        return null
-      },
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
   session: { strategy: 'jwt' },
+  callbacks: {
+    async signIn({ user }) {
+      const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim())
+      return allowedEmails.includes(user.email || '')
+    },
+  },
   pages: {
     signIn: '/admin/login',
+    error: '/admin/login',
   },
 }
