@@ -40,6 +40,18 @@ model MediaFile {
   createdAt    DateTime @default(now())
 }
 
+model CustomPage {
+  id           String        @id @default(cuid())
+  title        String
+  slug         String        @unique
+  originalName String
+  storedFile   String        @unique
+  size         Int
+  status       ProjectStatus @default(DRAFT)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
 enum ProjectStatus {
   DRAFT
   PUBLISHED
