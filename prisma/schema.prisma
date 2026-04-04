@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ContentSection {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  content   String
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  title       String
+  slug        String        @unique
+  description String
+  previewUrl  String?
+  techStack   String        @default("[]")
+  status      ProjectStatus @default(DRAFT)
+  cardType    CardType      @default(EXTERNAL_LINK)
+  externalUrl String?
+  pageContent String?
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model MediaFile {
+  id           String   @id @default(cuid())
+  filename     String   @unique
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  createdAt    DateTime @default(now())
+}
+
+enum ProjectStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum CardType {
+  EXTERNAL_LINK
+  DETAIL_PAGE
+}
+
+model SiteSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @default("")
+}
+
+model ResumeExperience {
+  id          String   @id @default(cuid())
+  company     String
+  position    String
+  periodFrom  String
+  periodTo    String
+  description String   @default("")
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ContactButton {
+  id        String @id @default(cuid())
+  label     String
+  url       String
+  icon      String @default("calendar")
+  sortOrder Int    @default(0)
+}
+
+model SocialLink {
+  id        String  @id @default(cuid())
+  platform  String  @unique
+  url       String  @default("")
+  enabled   Boolean @default(false)
+  sortOrder Int     @default(0)
+}
