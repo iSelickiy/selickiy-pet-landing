@@ -47,11 +47,13 @@
 2. Выполняется `git push` в `main`
 3. GitHub webhook отправляет запрос на сервер
 4. webhook service запускает `/var/www/deploy.sh`
-5. Скрипт выполняет `git pull`
-6. Скрипт сохраняет серверные PG-специфичные Prisma-файлы
-7. Выполняется `npm run build`
-8. Рестартуется `portfolio.service`
-9. nginx проксирует `selickiy.space` на `localhost:3000`
+5. Скрипт сохраняет server-specific PostgreSQL-файлы: `prisma/schema.prisma`, `src/lib/prisma.ts`, `prisma/seed.ts`
+6. Скрипт очищает только эти файлы в рабочем дереве и удаляет известный мусор `._*`
+7. Скрипт выполняет `git fetch` и `git reset --hard origin/main`
+8. Скрипт восстанавливает server-specific PostgreSQL-файлы из backup
+9. Выполняются `npm install`, `npx prisma generate`, `npx prisma migrate deploy`, `npm run build`
+10. Рестартуется `portfolio.service`
+11. nginx проксирует `selickiy.space` на `localhost:3000`
 
 ## Uploads And Runtime Storage
 
@@ -69,11 +71,12 @@
 
 ## Operational Caveats
 
-- серверные Prisma-файлы частично защищены через `assume-unchanged`
-- изменения Prisma-схемы нужно переносить аккуратно
+- production по-прежнему использует server-specific версии `prisma/schema.prisma`, `src/lib/prisma.ts` и `prisma/seed.ts`, потому что сервер живёт на PostgreSQL, а локальная dev-среда не идентична продовой
+- deploy script очищает только эти файлы перед `git reset`, чтобы webhook deploy не падал на локальных server-side изменениях
 - Prisma client генерируется в `src/generated/prisma`
 - для production важны `prisma generate`, миграции и корректные env-переменные
 - runtime storage не должен лежать внутри git-managed файлов проекта
+- файлы `._*` — это мусорные macOS metadata files; они не должны попадать ни в git, ни в `/var/www/portfolio`
 
 ## Related Docs
 

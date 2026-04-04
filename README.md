@@ -21,6 +21,7 @@ npm run start
 - Эта папка пушится в GitHub и участвует в production deploy.
 - На сервере используется PostgreSQL.
 - Upload-данные и custom HTML pages не должны храниться в git.
+- Production deploy очищает только server-specific Prisma-файлы перед `git reset`, а затем восстанавливает их и запускает `prisma generate`, `prisma migrate deploy`, `build` и `restart`.
 
 ## Документация
 
