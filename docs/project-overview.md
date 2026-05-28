@@ -14,21 +14,17 @@
 - PostgreSQL 16 на сервере
 - nginx + systemd
 
-## Две среды
-
-### `product-mvp`
-
-- локальная среда разработки
-- SQLite
-- credentials auth
-- рабочая папка для разработки
+## Рабочая среда
 
 ### `portfolio-git`
 
-- git/deploy-клон
-- PostgreSQL-ориентированная Prisma-конфигурация
-- пушится в GitHub
+- единая локальная рабочая папка
+- подключена к GitHub remote
+- пушится в `origin/main`
 - используется production deploy pipeline
+
+Папка `../product-mvp` была учебной локальной копией и больше не должна быть
+источником правок.
 
 ## Production Deploy Pipeline
 
@@ -43,7 +39,7 @@
 
 Цепочка деплоя:
 
-1. Изменения попадают в `portfolio-git`
+1. Изменения вносятся в `portfolio-git`
 2. Выполняется `git push` в `main`
 3. GitHub webhook отправляет запрос на сервер
 4. webhook service принимает запрос через `/var/www/webhook.js` и запускает `/var/www/deploy.sh`

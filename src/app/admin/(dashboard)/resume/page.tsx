@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import ResumeEditor from '@/components/admin/ResumeEditor'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ResumePage() {
   const experiences = await prisma.resumeExperience.findMany({
     orderBy: { sortOrder: 'asc' },

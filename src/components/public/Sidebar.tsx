@@ -4,6 +4,7 @@ import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import RichContent from '@/components/ui/RichContent'
+import { useIsMounted } from '@/lib/useIsMounted'
 
 interface SidebarProps {
   firstName: string
@@ -93,10 +94,8 @@ export default function Sidebar({
   socialLinks,
 }: SidebarProps) {
   const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
+  const mounted = useIsMounted()
   const [mobileOpen, setMobileOpen] = useState(false)
-
-  useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     const handleResize = () => {

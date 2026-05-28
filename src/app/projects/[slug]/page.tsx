@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import RichContent from '@/components/ui/RichContent'
 
+export const dynamic = 'force-dynamic'
+
 interface ProjectPageProps {
   params: Promise<{ slug: string }>
 }

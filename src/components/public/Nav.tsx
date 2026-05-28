@@ -1,8 +1,8 @@
 'use client'
 
 import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useIsMounted } from '@/lib/useIsMounted'
 
 const navLinks = [
   { label: 'О себе', href: '#about' },
@@ -13,11 +13,7 @@ const navLinks = [
 
 export default function Nav() {
   const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useIsMounted()
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-bg-primary/80 backdrop-blur-md border-b border-border-theme">

@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { readCustomPageFile } from '@/lib/customPageStorage'
 
+export const dynamic = 'force-dynamic'
+
 interface CustomPageRouteProps {
   params: Promise<{ slug: string }>
 }

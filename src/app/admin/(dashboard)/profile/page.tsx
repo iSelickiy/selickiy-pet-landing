@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import ProfileEditor from '@/components/admin/ProfileEditor'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ProfilePage() {
   const settings = await prisma.siteSetting.findMany()
   const contactButtons = await prisma.contactButton.findMany({

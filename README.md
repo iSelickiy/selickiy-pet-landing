@@ -1,11 +1,11 @@
 # Portfolio Landing
 
-Git/deploy-клон для сайта-портфолио и админки.
+Единая рабочая папка для сайта-портфолио, админки, GitHub и production deploy.
 
 ## Где что находится
 
-- Dev-окружение: `../product-mvp/`
-- Git/deploy-клон: `portfolio-git/`
+- Рабочий проект: `portfolio-git/`
+- Учебный playbook без отдельного лендинга: `../product-playbook/README.md`
 
 ## Быстрый старт
 
@@ -20,6 +20,7 @@ npm run start
 
 - Последнее обновление: 2026-04-14 (добавлена метка даты для проверки деплоя)
 - Эта папка пушится в GitHub и участвует в production deploy.
+- `../product-mvp/` больше не нужен как отдельная рабочая копия. Если там остались нужные runtime-файлы, перенесите их в эту папку вручную перед удалением.
 - На сервере используется PostgreSQL.
 - Upload-данные и custom HTML pages не должны храниться в git.
 - Production deploy очищает только server-specific Prisma-файлы перед `git reset`, а затем восстанавливает их и запускает `prisma generate`, `prisma migrate deploy`, `build` и `restart`.
@@ -28,6 +29,7 @@ npm run start
 
 ## Документация
 
+- Единый deploy runbook: [docs/deploy-runbook.md](docs/deploy-runbook.md)
 - Полное описание проекта: [docs/project-overview.md](docs/project-overview.md)
 - Спецификация custom pages: [docs/superpowers/specs/2026-04-04-custom-pages.md](docs/superpowers/specs/2026-04-04-custom-pages.md)
 - Production runbook: [docs/production-maintenance.md](docs/production-maintenance.md)
