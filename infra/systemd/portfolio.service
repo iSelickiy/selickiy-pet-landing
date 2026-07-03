@@ -1,0 +1,16 @@
+[Unit]
+Description=Portfolio Next.js App
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/portfolio
+ExecStart=/usr/bin/node /var/www/portfolio/node_modules/.bin/next start -p 3000
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/portfolio/.env
+
+[Install]
+WantedBy=multi-user.target

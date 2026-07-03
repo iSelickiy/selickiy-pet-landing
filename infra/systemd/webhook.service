@@ -1,0 +1,13 @@
+[Unit]
+Description=GitHub Webhook Listener
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/node /var/www/webhook.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
