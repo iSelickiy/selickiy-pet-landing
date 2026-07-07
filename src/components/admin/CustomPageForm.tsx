@@ -18,6 +18,8 @@ interface CustomPage {
 
 interface CustomPageFormProps {
   initialData?: CustomPage
+  existingFolders?: string[]
+  existingTags?: string[]
 }
 
 function formatSize(bytes: number) {
@@ -26,7 +28,11 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export default function CustomPageForm({ initialData }: CustomPageFormProps) {
+export default function CustomPageForm({
+  initialData,
+  existingFolders = [],
+  existingTags = [],
+}: CustomPageFormProps) {
   const router = useRouter()
   const isEdit = Boolean(initialData)
 
@@ -34,21 +40,38 @@ export default function CustomPageForm({ initialData }: CustomPageFormProps) {
   const [slug, setSlug] = useState(initialData?.slug || '')
   const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>(initialData?.status || 'DRAFT')
   const [folder, setFolder] = useState(initialData?.folder || '')
-  const [tagsStr, setTagsStr] = useState(() => {
+  const [selectedTags, setSelectedTags] = useState<string[]>(() => {
     if (initialData?.tags) {
       try {
-        return JSON.parse(initialData.tags).join(', ')
+        return JSON.parse(initialData.tags)
       } catch {
-        return ''
+        return []
       }
     }
-    return ''
+    return []
   })
+  const [newTag, setNewTag] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const publicUrl = slug ? `/custom/${slug}` : null
+
+  const availableTags = existingTags.filter((t) => !selectedTags.includes(t))
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    )
+  }
+
+  const addNewTag = () => {
+    const trimmed = newTag.trim()
+    if (trimmed && !selectedTags.includes(trimmed)) {
+      setSelectedTags((prev) => [...prev, trimmed])
+    }
+    setNewTag('')
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,11 +84,7 @@ export default function CustomPageForm({ initialData }: CustomPageFormProps) {
       formData.append('slug', slug)
       formData.append('status', status)
       formData.append('folder', folder)
-      const parsedTags = tagsStr
-        .split(',')
-        .map((t: string) => t.trim())
-        .filter(Boolean)
-      formData.append('tags', JSON.stringify(parsedTags))
+      formData.append('tags', JSON.stringify(selectedTags))
       if (file) {
         formData.append('file', file)
       }
@@ -133,19 +152,81 @@ export default function CustomPageForm({ initialData }: CustomPageFormProps) {
           </select>
         </div>
 
-        <Input
-          label="Папка"
-          value={folder}
-          onChange={(e) => setFolder(e.target.value)}
-          placeholder="Например, landings, tests, drafts"
-        />
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-gray-700">Папка</label>
+          <input
+            list="folder-list"
+            value={folder}
+            onChange={(e) => setFolder(e.target.value)}
+            placeholder="Выбери или введи название папки..."
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+              focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+          />
+          <datalist id="folder-list">
+            {existingFolders.map((f) => (
+              <option key={f} value={f} />
+            ))}
+          </datalist>
+        </div>
 
-        <Input
-          label="Теги (через запятую)"
-          value={tagsStr}
-          onChange={(e) => setTagsStr(e.target.value)}
-          placeholder="Например, promo, demo, wip"
-        />
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-gray-700">Теги</label>
+
+          {selectedTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedTags.map((tag) => (
+                <span
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className="inline-flex items-center gap-1 text-xs bg-blue-600 text-white px-2.5 py-1 rounded-full cursor-pointer hover:bg-blue-700 transition-colors"
+                >
+                  {tag}
+                  <span className="ml-0.5">&times;</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {availableTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-xs text-gray-400 mr-1 self-center">
+                {selectedTags.length ? 'Добавить:' : 'Выбери:'}
+              </span>
+              {availableTags.map((tag) => (
+                <span
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full cursor-pointer hover:bg-gray-200 transition-colors"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              addNewTag()
+            }}
+            className="flex gap-2"
+          >
+            <input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              placeholder="Новый тег..."
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm
+                focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+            />
+            <button
+              type="submit"
+              className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-2 transition-colors"
+              disabled={!newTag.trim()}
+            >
+              Добавить
+            </button>
+          </form>
+        </div>
 
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-gray-700">
