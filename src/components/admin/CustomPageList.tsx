@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
 
 interface CustomPage {
   id: string
@@ -11,6 +12,8 @@ interface CustomPage {
   originalName: string
   size: number
   status: 'DRAFT' | 'PUBLISHED'
+  folder: string
+  tags: string
   updatedAt: string
 }
 
@@ -24,8 +27,55 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function parseTags(tags: string): string[] {
+  try {
+    const parsed = JSON.parse(tags)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 export default function CustomPageList({ initialPages }: CustomPageListProps) {
   const [pages, setPages] = useState(initialPages)
+  const [search, setSearch] = useState('')
+  const [selectedFolder, setSelectedFolder] = useState('')
+  const [selectedTag, setSelectedTag] = useState('')
+
+  const folders = useMemo(() => {
+    const set = new Set(pages.map((p) => p.folder).filter(Boolean))
+    return Array.from(set).sort()
+  }, [pages])
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>()
+    pages.forEach((p) => parseTags(p.tags).forEach((t) => set.add(t)))
+    return Array.from(set).sort()
+  }, [pages])
+
+  const filteredPages = useMemo(() => {
+    return pages.filter((page) => {
+      if (search) {
+        const q = search.toLowerCase()
+        if (
+          !page.title.toLowerCase().includes(q) &&
+          !page.slug.toLowerCase().includes(q)
+        ) {
+          return false
+        }
+      }
+      if (selectedFolder && page.folder !== selectedFolder) {
+        return false
+      }
+      if (selectedTag) {
+        const pageTags = parseTags(page.tags)
+        if (!pageTags.includes(selectedTag)) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [pages, search, selectedFolder, selectedTag])
 
   const handleDelete = async (id: string) => {
     if (!confirm('Удалить custom page?')) return
@@ -41,6 +91,8 @@ export default function CustomPageList({ initialPages }: CustomPageListProps) {
     formData.append('title', page.title)
     formData.append('slug', page.slug)
     formData.append('status', page.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED')
+    formData.append('folder', page.folder)
+    formData.append('tags', page.tags)
 
     const res = await fetch(`/api/custom-pages/${page.id}`, {
       method: 'PUT',
@@ -62,21 +114,116 @@ export default function CustomPageList({ initialPages }: CustomPageListProps) {
         </Link>
       </div>
 
-      {pages.length === 0 ? (
-        <p className="text-gray-500 text-center py-12">Custom pages пока нет</p>
+      <div className="mb-6 space-y-4">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Поиск по названию или slug..."
+        />
+
+        {folders.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-500 mr-1">Папки:</span>
+            <button
+              onClick={() => setSelectedFolder('')}
+              className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+                !selectedFolder
+                  ? 'bg-gray-800 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Все
+            </button>
+            {folders.map((f) => (
+              <button
+                key={f}
+                onClick={() =>
+                  setSelectedFolder(selectedFolder === f ? '' : f)
+                }
+                className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+                  selectedFolder === f
+                    ? 'bg-gray-800 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {allTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-500 mr-1">Теги:</span>
+            <button
+              onClick={() => setSelectedTag('')}
+              className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+                !selectedTag
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+              }`}
+            >
+              Все
+            </button>
+            {allTags.map((t) => (
+              <button
+                key={t}
+                onClick={() => setSelectedTag(selectedTag === t ? '' : t)}
+                className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+                  selectedTag === t
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {filteredPages.length === 0 ? (
+        <p className="text-gray-500 text-center py-12">
+          {pages.length === 0
+            ? 'Custom pages пока нет'
+            : 'Ничего не найдено'}
+        </p>
       ) : (
         <div className="flex flex-col gap-3">
-          {pages.map((page) => (
+          {filteredPages.map((page) => (
             <div
               key={page.id}
               className="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-4"
             >
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 truncate">{page.title}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-gray-900 truncate">{page.title}</p>
+                  {page.folder && (
+                    <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                      {page.folder}
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-gray-500 font-mono">/custom/{page.slug}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {page.originalName} · {formatSize(page.size)}
                 </p>
+                {(() => {
+                  const pageTags = parseTags(page.tags)
+                  if (pageTags.length === 0) return null
+                  return (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {pageTags.map((t) => (
+                        <span
+                          key={t}
+                          className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
 
               <span

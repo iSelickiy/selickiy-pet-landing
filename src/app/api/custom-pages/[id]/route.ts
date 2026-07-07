@@ -45,6 +45,8 @@ export async function PUT(
   const title = String(formData.get('title') || '').trim()
   const requestedSlug = String(formData.get('slug') || '').trim()
   const status = String(formData.get('status') || existing.status)
+  const folder = String(formData.get('folder') || '').trim()
+  const tagsRaw = String(formData.get('tags') || '[]').trim()
   const maybeFile = formData.get('file')
 
   if (!title) {
@@ -73,6 +75,8 @@ export async function PUT(
         storedFile,
         size,
         status: status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT',
+        folder,
+        tags: tagsRaw,
       },
     })
 

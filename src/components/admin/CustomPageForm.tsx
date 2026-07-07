@@ -12,6 +12,8 @@ interface CustomPage {
   originalName: string
   size: number
   status: 'DRAFT' | 'PUBLISHED'
+  folder: string
+  tags: string
 }
 
 interface CustomPageFormProps {
@@ -31,6 +33,17 @@ export default function CustomPageForm({ initialData }: CustomPageFormProps) {
   const [title, setTitle] = useState(initialData?.title || '')
   const [slug, setSlug] = useState(initialData?.slug || '')
   const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>(initialData?.status || 'DRAFT')
+  const [folder, setFolder] = useState(initialData?.folder || '')
+  const [tagsStr, setTagsStr] = useState(() => {
+    if (initialData?.tags) {
+      try {
+        return JSON.parse(initialData.tags).join(', ')
+      } catch {
+        return ''
+      }
+    }
+    return ''
+  })
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -47,6 +60,12 @@ export default function CustomPageForm({ initialData }: CustomPageFormProps) {
       formData.append('title', title)
       formData.append('slug', slug)
       formData.append('status', status)
+      formData.append('folder', folder)
+      const parsedTags = tagsStr
+        .split(',')
+        .map((t: string) => t.trim())
+        .filter(Boolean)
+      formData.append('tags', JSON.stringify(parsedTags))
       if (file) {
         formData.append('file', file)
       }
@@ -113,6 +132,20 @@ export default function CustomPageForm({ initialData }: CustomPageFormProps) {
             <option value="PUBLISHED">Опубликован</option>
           </select>
         </div>
+
+        <Input
+          label="Папка"
+          value={folder}
+          onChange={(e) => setFolder(e.target.value)}
+          placeholder="Например, landings, tests, drafts"
+        />
+
+        <Input
+          label="Теги (через запятую)"
+          value={tagsStr}
+          onChange={(e) => setTagsStr(e.target.value)}
+          placeholder="Например, promo, demo, wip"
+        />
 
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-gray-700">

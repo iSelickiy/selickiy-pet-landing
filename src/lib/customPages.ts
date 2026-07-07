@@ -9,6 +9,8 @@ export interface CustomPageRecord {
   storedFile: string
   size: number
   status: 'DRAFT' | 'PUBLISHED'
+  folder: string
+  tags: string
   createdAt: Date
   updatedAt: Date
 }
