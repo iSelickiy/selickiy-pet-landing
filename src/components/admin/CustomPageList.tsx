@@ -109,7 +109,7 @@ export default function CustomPageList({ initialPages }: CustomPageListProps) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Custom Pages</h1>
-        <Link href="/admin/custom-pages/new">
+        <Link href={`/admin/custom-pages/new${selectedFolder ? `?folder=${encodeURIComponent(selectedFolder)}` : ''}`}>
           <Button>Создать страницу</Button>
         </Link>
       </div>

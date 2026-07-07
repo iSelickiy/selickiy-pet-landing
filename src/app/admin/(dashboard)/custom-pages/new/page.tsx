@@ -3,7 +3,12 @@ import CustomPageForm from '@/components/admin/CustomPageForm'
 
 export const dynamic = 'force-dynamic'
 
-export default async function NewCustomPage() {
+export default async function NewCustomPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ folder?: string }>
+}) {
+  const { folder: defaultFolder } = await searchParams
   const pages = await prisma.customPage.findMany({
     select: { folder: true, tags: true },
   })
@@ -24,5 +29,5 @@ export default async function NewCustomPage() {
     )
   ).sort()
 
-  return <CustomPageForm existingFolders={folders} existingTags={tags} />
+  return <CustomPageForm existingFolders={folders} existingTags={tags} defaultFolder={defaultFolder || ''} />
 }

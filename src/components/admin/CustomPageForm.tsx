@@ -20,6 +20,7 @@ interface CustomPageFormProps {
   initialData?: CustomPage
   existingFolders?: string[]
   existingTags?: string[]
+  defaultFolder?: string
 }
 
 function formatSize(bytes: number) {
@@ -32,6 +33,7 @@ export default function CustomPageForm({
   initialData,
   existingFolders = [],
   existingTags = [],
+  defaultFolder = '',
 }: CustomPageFormProps) {
   const router = useRouter()
   const isEdit = Boolean(initialData)
@@ -39,7 +41,7 @@ export default function CustomPageForm({
   const [title, setTitle] = useState(initialData?.title || '')
   const [slug, setSlug] = useState(initialData?.slug || '')
   const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>(initialData?.status || 'DRAFT')
-  const [folder, setFolder] = useState(initialData?.folder || '')
+  const [folder, setFolder] = useState(initialData ? initialData.folder : defaultFolder)
   const [selectedTags, setSelectedTags] = useState<string[]>(() => {
     if (initialData?.tags) {
       try {
