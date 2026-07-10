@@ -1,59 +1,61 @@
+import { CaretDown } from '@phosphor-icons/react/dist/ssr'
 import RichContent from '@/components/ui/RichContent'
 
 interface ResumeProps {
   experiences: Array<{
+    id?: string
     company: string
     position: string
     periodFrom: string
     periodTo: string
     description: string
   }>
-  skillsContent: string
+  skillsContent?: string
 }
 
-export default function Resume({ experiences, skillsContent }: ResumeProps) {
+export default function Resume({ experiences, skillsContent = '' }: ResumeProps) {
   return (
-    <section id="resume">
-      <div>
-        <h2 className="text-3xl font-bold text-text-primary mb-8">Резюме</h2>
-
-        {experiences.length > 0 && (
-          <div className="space-y-4 mb-8">
-            {experiences.map((exp, i) => (
-              <div
-                key={i}
-                className="bg-card-bg rounded-2xl border border-border-theme p-6 md:p-8 shadow-sm"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 mb-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-text-primary">
-                      {exp.position}
-                    </h3>
-                    <p className="text-sm text-text-secondary font-medium">
-                      {exp.company}
-                    </p>
-                  </div>
-                  <span className="text-sm text-text-secondary whitespace-nowrap">
-                    {exp.periodFrom} — {exp.periodTo}
-                  </span>
-                </div>
-                {exp.description && (
-                  <div className="text-sm text-text-secondary leading-relaxed">
-                    <RichContent html={exp.description} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {skillsContent && (
-          <div className="bg-card-bg rounded-2xl border border-border-theme p-8 md:p-10 shadow-sm">
-            <h3 className="text-lg font-semibold text-text-primary mb-4">Навыки</h3>
-            <RichContent html={skillsContent} />
-          </div>
-        )}
+    <section id="resume" aria-labelledby="resume-title" className="scroll-mt-28">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Опыт и путь</p>
+          <h2 id="resume-title">Резюме</h2>
+        </div>
+        <span className="text-sm text-text-secondary">Нажми, чтобы раскрыть</span>
       </div>
+
+      {experiences.length ? (
+        <div className="resume-timeline">
+          {experiences.map((experience, index) => (
+            <details key={experience.id || `${experience.company}-${index}`} className="resume-entry group" open={index === 0}>
+              <summary className="focus-ring grid cursor-pointer list-none grid-cols-[88px_1fr_auto] gap-3 rounded-xl px-2 py-4 sm:grid-cols-[112px_1fr_auto]">
+                <span className="text-sm leading-5 text-text-secondary">
+                  {experience.periodFrom}<br className="sm:hidden" /> — {experience.periodTo}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-base font-semibold leading-5 text-text-primary">{experience.position}</span>
+                  <span className="mt-1 block text-sm text-accent">{experience.company}</span>
+                </span>
+                <CaretDown size={18} className="mt-1 text-text-secondary transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              {experience.description && (
+                <div className="pb-5 pl-[103px] pr-8 sm:pl-[127px]">
+                  <RichContent html={experience.description} className="text-sm" />
+                </div>
+              )}
+            </details>
+          ))}
+        </div>
+      ) : (
+        <p className="empty-state">Хронология скоро появится.</p>
+      )}
+
+      {skillsContent && (
+        <details className="mt-5 border-t border-border-theme pt-4">
+          <summary className="focus-ring cursor-pointer rounded-lg py-2 text-sm font-medium text-accent">Навыки и инструменты</summary>
+          <RichContent html={skillsContent} className="mt-3 text-sm" />
+        </details>
+      )}
     </section>
   )
 }

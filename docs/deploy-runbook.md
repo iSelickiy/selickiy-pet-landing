@@ -1,247 +1,96 @@
 # Deploy Runbook
 
-## Что это за файл
+## Перед первым выпуском модернизации
 
-Это единый источник правды по деплою проекта `portfolio-git`.
-
-Если нужно быстро понять:
-
-- откуда деплоится код
-- что происходит после `git push`
-- какие файлы на сервере особенные
-- как не потерять runtime-данные
-- как проверять, что прод жив
-- что делать, если деплой или сайт сломались
-
-смотреть нужно сюда.
-
-## Короткая схема
-
-1. Вы разрабатываете локально в `portfolio-git`
-2. Делаете `git push` в `main`
-3. GitHub webhook вызывает серверный listener
-4. Listener запускает `/var/www/deploy.sh`
-5. `deploy.sh` обновляет код, генерирует Prisma client, применяет миграции, собирает Next.js и рестартует `portfolio.service`
-6. nginx продолжает проксировать `selickiy.space` на `localhost:3000`
-
-## Где что находится
-
-### Локально
-
-- рабочий проект: `portfolio-git`
-- учебный playbook: `../product-playbook/README.md`
-
-### На сервере
-
-- приложение: `/var/www/portfolio`
-- deploy script: `/var/www/deploy.sh`
-- webhook listener: `/var/www/webhook.js`
-- runtime storage для custom pages: `/var/www/storage/custom-pages`
-- swap: `/swapfile`
-
-## Инфраструктура production
-
-- сервер: Ubuntu 24.04
-- Node.js 22
-- PostgreSQL 16
-- nginx
-- systemd
-- домен: `selickiy.space`
-
-Основные сервисы:
-
-- `portfolio.service` — production Next.js app
-- `webhook.service` — listener для GitHub webhook
-
-## Как правильно деплоить код
-
-### Обычный сценарий
-
-1. Проверить изменения в `portfolio-git`
-2. Закоммитить их
-3. Запушить в `main`
-4. Дождаться webhook deploy
-5. Проверить, что сайт отвечает и сервисы живы
-
-### Команды локально
+1. Сделать ручной backup и проверить его:
 
 ```bash
-cd /Users/selickiy/Code/BOOST/portfolio-git
-git status
-git add .
-git commit -m "your message"
-git push origin main
+sudo -u portfolio /var/www/portfolio/infra/backup.sh
 ```
 
-## Что делает production deploy
-
-Серверный `/var/www/deploy.sh` сейчас делает следующее:
-
-1. Берёт lock через `flock`, чтобы не шло два deploy одновременно
-2. Переходит в `/var/www/portfolio`
-3. Делает backup server-specific Prisma-файлов:
-   - `prisma/schema.prisma`
-   - `src/lib/prisma.ts`
-   - `prisma/seed.ts`
-4. Удаляет мусорные `._*` файлы
-5. Выполняет `git fetch` и `git reset --hard origin/main`
-6. Возвращает server-specific Prisma-файлы из backup
-7. Запускает:
+2. Создать пользователя и каталоги:
 
 ```bash
-npm install --production=false
-npx prisma generate
-npx prisma migrate deploy
-NODE_OPTIONS="--max-old-space-size=512" npm run build
-systemctl restart portfolio.service
+sudo useradd --system --home /var/lib/portfolio --shell /usr/sbin/nologin portfolio
+sudo install -d -o portfolio -g portfolio -m 0750 /var/lib/portfolio/{uploads,custom-pages,backups}
+sudo chown -R portfolio:portfolio /var/www/portfolio
 ```
 
-8. Если build падает, старая `.next` восстанавливается из временного backup
-9. После build скрипт создаёт Prisma alias-пути в `node_modules/@prisma/...`, если их потребовал Turbopack build
+3. Установить env‑файлы по примерам из `infra/env/`:
 
-## Почему Prisma тут особенная
+- `/var/www/portfolio/.env`
+- `/etc/portfolio/webhook.env` — новый ротированный `WEBHOOK_SECRET`
+- `/etc/portfolio/backup.env`
 
-Production живёт не на той же конфигурации, что локальный dev.
-
-Сейчас важно помнить:
-
-- локальная разработка не полностью идентична production
-- production хранит PostgreSQL-специфичные версии:
-  - `prisma/schema.prisma`
-  - `src/lib/prisma.ts`
-  - `prisma/seed.ts`
-- deploy script специально сохраняет их до `git reset` и возвращает обратно
-
-То есть production Prisma сейчас не на 100% “чисто из git”. Это важная особенность проекта.
-
-## Runtime-данные, которые нельзя класть в git
-
-### Custom Pages
-
-HTML-файлы, загружаемые через админку:
-
-- не деплоятся через `git push`
-- живут в `CUSTOM_PAGES_DIR`
-- текущий production path: `/var/www/storage/custom-pages`
-
-Они должны переживать:
-
-- `git pull`
-- `npm run build`
-- `systemctl restart portfolio.service`
-
-### Обычное правило
-
-Все пользовательские runtime-данные должны жить вне git checkout.
-
-## Что проверять после деплоя
-
-### Минимум
+4. Установить конфиги:
 
 ```bash
-systemctl is-active portfolio.service
-systemctl is-active webhook.service
-curl -I http://127.0.0.1:3000
-curl -I https://selickiy.space
+sudo cp infra/systemd/*.service infra/systemd/*.timer /etc/systemd/system/
+sudo cp infra/nginx/selickiy.space.conf /etc/nginx/sites-enabled/portfolio
+sudo cp infra/sudoers/portfolio /etc/sudoers.d/portfolio
+sudo chmod 0440 /etc/sudoers.d/portfolio
+sudo visudo -cf /etc/sudoers.d/portfolio
+sudo nginx -t
+sudo systemctl daemon-reload
 ```
 
-### Прикладная проверка
+5. Обновить GitHub webhook URL на `https://selickiy.space/deploy`, выбрать `application/json`, задать тот же новый secret и включить SSL verification.
 
-- `https://selickiy.space/admin/login` открывается
-- `https://selickiy.space/admin/custom-pages` редиректит на login, если нет сессии
-- `https://selickiy.space/custom/<missing-slug>` даёт `404`
-
-## Что смотреть, если деплой сломался
-
-### Логи
+6. Включить сервисы:
 
 ```bash
-journalctl -u portfolio.service -n 100 --no-pager
-journalctl -u webhook.service -n 100 --no-pager
+sudo systemctl enable --now portfolio.service webhook.service portfolio-backup.timer
 ```
 
-### Типовые проблемы
+Сервисы слушают только loopback. Проверить, что извне `3000` и `9000` недоступны; при необходимости дополнительно включить UFW только для 22/80/443.
 
-#### 1. Битый `.next`
+## Обычный deploy
 
-Симптомы:
+Push в `main` вызывает подписанный webhook. `infra/deploy.sh`:
 
-- `Could not find a production build in the '.next' directory`
-- отсутствуют manifest/chunk файлы
-- сайт отдаёт `500` или сервис не стартует
+1. берёт `flock`;
+2. создаёт и проверяет backup;
+3. синхронизирует checkout с `origin/main`;
+4. выполняет `npm ci` и полный verify;
+5. сохраняет предыдущую `.next`;
+6. собирает новую `.next`;
+7. применяет обратно совместимые миграции;
+8. пишет commit и builtAt в `/var/lib/portfolio/release.env`;
+9. рестартует только `portfolio.service`;
+10. проверяет `/api/health`.
 
-Что делать:
+Пользователю `portfolio` через sudo разрешены только restart/status/is-active `portfolio.service`.
 
-1. проверить логи
-2. при необходимости пересобрать вручную в `/var/www/portfolio`
-3. рестартнуть `portfolio.service`
+## Проверка
 
-#### 2. OOM во время deploy
-
-Симптомы:
-
-- `webhook.service` killed by OOM killer
-- build прерывается
-- сайт может остаться на битом build после reboot
-
-Что уже сделано для защиты:
-
-- включён `1G` swap
-- build запускается с лимитом памяти
-- webhook не буферизует весь вывод deploy в память
-
-#### 3. Prisma runtime / alias ошибки
-
-Симптомы:
-
-- ошибки вида `Cannot find module '@prisma/client-.../runtime/client'`
-- страницы, которые идут в БД, падают с `500`
-
-Что уже сделано для защиты:
-
-- после build deploy script автоматически создаёт нужные alias-ссылки в `node_modules/@prisma`
-
-## Ручное восстановление, если сайт уже сломан
-
-Войти на сервер и перейти в:
+Локальная read-only сверка:
 
 ```bash
-cd /var/www/portfolio
+npm run verify:deployment
 ```
 
-Проверить:
+Ручной smoke на сервере:
 
 ```bash
-systemctl status portfolio.service
-journalctl -u portfolio.service -n 100 --no-pager
+curl -fsS http://127.0.0.1:3000/api/health
+curl -I https://selickiy.space/
+curl -I https://selickiy.space/admin/login
+sudo systemctl is-active portfolio.service webhook.service portfolio-backup.timer
+sudo ss -ltnp | grep -E ':(3000|9000)'
 ```
 
-Если нужен ручной rebuild:
+Ожидается `127.0.0.1:3000` и `127.0.0.1:9000`, не `0.0.0.0`.
+
+## Rollback
+
+При ошибке до restart deploy сам возвращает прежнюю `.next`. Миграции релиза должны оставаться обратно совместимыми.
+
+Для ручного возврата кода сначала зафиксировать нужный commit в `main`, затем запустить новый deploy. Не восстанавливать старую схему БД поверх новых данных без отдельного плана восстановления.
+
+## Логи
 
 ```bash
-npm install --production=false
-npx prisma generate
-npx prisma migrate deploy
-npm run build
-systemctl restart portfolio.service
+journalctl -u portfolio.service -n 150 --no-pager
+journalctl -u webhook.service -n 150 --no-pager
+journalctl -u portfolio-backup.service -n 150 --no-pager
 ```
-
-После этого проверить:
-
-```bash
-curl -I http://127.0.0.1:3000
-curl -I https://selickiy.space
-```
-
-## Важные caveats
-
-- Не складывать runtime HTML в git
-- Не удалять `.env`, runtime storage и server-specific Prisma-файлы во время cleanup
-- Файлы `._*` — это мусорные macOS metadata files, их можно удалять
-- Если меняется Prisma-схема, надо помнить про server-specific PostgreSQL-версии файлов
-
-## Связанные документы
-
-- Общее описание проекта: [project-overview.md](project-overview.md)
-- Maintenance notes: [production-maintenance.md](production-maintenance.md)
-- Custom pages spec: [superpowers/specs/2026-04-04-custom-pages.md](superpowers/specs/2026-04-04-custom-pages.md)

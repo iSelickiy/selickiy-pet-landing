@@ -2,83 +2,53 @@
 
 ## Назначение
 
-Проект представляет собой персональный сайт-портфолио с публичной витриной и защищённой админкой для управления содержимым.
+`selickiy.space` — личная страница Игоря Селицкого: контакты, раскрываемая хронология опыта, pet‑проекты любой степени готовности и лаборатория из custom HTML‑артефактов. Это не коммерческий лендинг; карьерный слой присутствует, но не доминирует.
 
 ## Стек
 
-- Next.js 16 App Router
-- React 19
-- Prisma
-- Tailwind CSS 4
-- NextAuth
-- PostgreSQL 16 на сервере
-- nginx + systemd
+- Node.js 22 (`.nvmrc`, `engines`, CI)
+- Next.js 16.2 с App Router и Cache Components
+- React 19.2, TypeScript 5.9, Tailwind CSS 4.3
+- Prisma ORM 7.8 + PostgreSQL 16
+- NextAuth 4 + Google OAuth
+- Tiptap 3.27, Zod, sanitize-html, file-type
+- nginx, systemd, GitHub webhook
 
-## Рабочая среда
+Локальная и production Prisma‑схема едины и используют PostgreSQL. Prisma Client генерируется в `src/generated/prisma`.
 
-### `portfolio-git`
+## Архитектура данных
 
-- единая локальная рабочая папка
-- подключена к GitHub remote
-- пушится в `origin/main`
-- используется production deploy pipeline
+- Публичные данные читаются через кешируемые функции из `src/lib/publicData.ts`.
+- Мутации админки инвалидируют связанные cache tags.
+- Rich HTML очищается на сервере; ссылки ограничены протоколами HTTP(S), mailto и tel.
+- Изображения хранятся в `UPLOADS_DIR`, по умолчанию `runtime/uploads`, и доступны по `/uploads/<filename>`.
+- Custom HTML хранится в `CUSTOM_PAGES_DIR`, по умолчанию `runtime/custom-pages`.
+- Runtime‑файлы не входят в git checkout.
 
-Папка `../product-mvp` была учебной локальной копией и больше не должна быть
-источником правок.
+## Production
 
-## Production Deploy Pipeline
+- checkout: `/var/www/portfolio`
+- runtime state: `/var/lib/portfolio`
+- app: `127.0.0.1:3000`
+- webhook: `127.0.0.1:9000`
+- наружу открыт только nginx на 80/443
+- публичный webhook URL: `https://selickiy.space/deploy`
+- health: `GET /api/health`
 
-Инфраструктура:
+Webhook принимает только подписанные GitHub push‑события для `main`. Секрет хранится в `/etc/portfolio/webhook.env`, не в git. Приложение и webhook работают от пользователя `portfolio`.
 
-- сервер: Ubuntu 24.04
-- Node.js 22
-- PostgreSQL 16
-- nginx
-- systemd
-- домен `selickiy.space`
+## Deploy
 
-Цепочка деплоя:
+`infra/deploy.sh` выполняет pre-deploy backup, `git reset` на `origin/main`, `npm ci`, Prisma generate, lint, typecheck, тесты, build, обратно совместимые миграции, restart и health smoke. Предыдущая `.next` сохраняется для rollback.
 
-1. Изменения вносятся в `portfolio-git`
-2. Выполняется `git push` в `main`
-3. GitHub webhook отправляет запрос на сервер
-4. webhook service принимает запрос через `/var/www/webhook.js` и запускает `/var/www/deploy.sh`
-5. Скрипт сохраняет server-specific PostgreSQL-файлы: `prisma/schema.prisma`, `src/lib/prisma.ts`, `prisma/seed.ts`
-6. Скрипт очищает только эти файлы в рабочем дереве и удаляет известный мусор `._*`
-7. Скрипт выполняет `git fetch` и `git reset --hard origin/main`
-8. Скрипт восстанавливает server-specific PostgreSQL-файлы из backup
-9. Выполняются `npm install`, `npx prisma generate`, `npx prisma migrate deploy`, `npm run build`
-10. При ошибке build предыдущая `.next` восстанавливается из временного backup
-11. Рестартуется `portfolio.service`
-12. nginx проксирует `selickiy.space` на `localhost:3000`
+Старой подмены production Prisma‑файлов больше нет.
 
-## Uploads And Runtime Storage
+## Backup
 
-### Медиа
+`portfolio-backup.timer` ежедневно сохраняет PostgreSQL, uploads и custom pages в `/var/lib/portfolio/backups`, проверяет архивы и держит 14 дней. Offsite‑копия остаётся отдельным операционным этапом.
 
-- изображения живут в `public/uploads`
+## Связанные документы
 
-### Custom Pages
-
-- custom HTML pages загружаются после релиза через админку
-- они не деплоятся через git push
-- хранятся в `CUSTOM_PAGES_DIR`
-- рекомендуемый продовый путь: `/var/www/storage/custom-pages`
-- должны переживать `git pull`, `npm run build` и рестарт сервиса
-
-## Operational Caveats
-
-- production по-прежнему использует server-specific версии `prisma/schema.prisma`, `src/lib/prisma.ts` и `prisma/seed.ts`, потому что сервер живёт на PostgreSQL, а локальная dev-среда не идентична продовой
-- deploy script очищает только эти файлы перед `git reset`, чтобы webhook deploy не падал на локальных server-side изменениях
-- webhook listener больше не буферизует полный вывод deploy в память: вывод стримится в journald
-- deploy script использует `flock`, чтобы не запускать несколько deploy одновременно
-- на сервере включён `1G` swap (`/swapfile`), потому что на конфигурации `1 CPU / 1 GB RAM` `next build` уже приводил к OOM-kill
-- Prisma client генерируется в `src/generated/prisma`
-- для production важны `prisma generate`, миграции и корректные env-переменные
-- runtime storage не должен лежать внутри git-managed файлов проекта
-- файлы `._*` — это мусорные macOS metadata files; они не должны попадать ни в git, ни в `/var/www/portfolio`
-
-## Related Docs
-
-- Custom pages spec: [superpowers/specs/2026-04-04-custom-pages.md](superpowers/specs/2026-04-04-custom-pages.md)
-- Existing admin redesign spec: [superpowers/specs/2026-04-04-admin-redesign.md](superpowers/specs/2026-04-04-admin-redesign.md)
+- [Deploy runbook](deploy-runbook.md)
+- [Production maintenance](production-maintenance.md)
+- [Custom pages specification](superpowers/specs/2026-04-04-custom-pages.md)

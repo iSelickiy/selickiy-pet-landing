@@ -1,0 +1,1 @@
+portfolio ALL=(root) NOPASSWD: /usr/bin/systemctl restart portfolio.service, /usr/bin/systemctl status portfolio.service, /usr/bin/systemctl is-active portfolio.service

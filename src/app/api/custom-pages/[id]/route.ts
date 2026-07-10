@@ -1,121 +1,108 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { revalidatePath } from 'next/cache'
+import { ZodError } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { authOptions } from '@/lib/auth'
-import { deleteCustomPageFile, saveCustomPageFile } from '@/lib/customPageStorage'
+import { apiError, requireAdmin, unknownApiError, validationError } from '@/lib/api'
+import { CACHE_TAGS, invalidatePublicCache } from '@/lib/cacheTags'
+import {
+  deleteCustomPageFile,
+  quarantineCustomPageFile,
+  saveCustomPageFile,
+} from '@/lib/customPageStorage'
 import { resolveUniqueCustomPageSlug, serializeCustomPage } from '@/lib/customPages'
+import { customPageFieldsSchema } from '@/lib/validation'
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+function parseTags(raw: FormDataEntryValue | null) {
+  try {
+    const value: unknown = JSON.parse(String(raw || '[]'))
+    return Array.isArray(value) ? value : []
+  } catch {
+    return []
   }
+}
 
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await requireAdmin())) return apiError(401, 'UNAUTHORIZED', 'Требуется авторизация')
   const { id } = await params
   const customPage = await prisma.customPage.findUnique({ where: { id } })
-
-  if (!customPage) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
+  if (!customPage) return apiError(404, 'NOT_FOUND', 'Страница не найдена')
   return NextResponse.json(serializeCustomPage(customPage))
 }
 
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await requireAdmin())) return apiError(401, 'UNAUTHORIZED', 'Требуется авторизация')
   const { id } = await params
   const existing = await prisma.customPage.findUnique({ where: { id } })
+  if (!existing) return apiError(404, 'NOT_FOUND', 'Страница не найдена')
 
-  if (!existing) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
-  const formData = await request.formData()
-  const title = String(formData.get('title') || '').trim()
-  const requestedSlug = String(formData.get('slug') || '').trim()
-  const status = String(formData.get('status') || existing.status)
-  const folder = String(formData.get('folder') || '').trim()
-  const tagsRaw = String(formData.get('tags') || '[]').trim()
-  const maybeFile = formData.get('file')
-
-  if (!title) {
-    return NextResponse.json({ error: 'Title is required' }, { status: 400 })
-  }
-
+  let newStoredFile: string | null = null
+  let quarantine: Awaited<ReturnType<typeof quarantineCustomPageFile>> | null = null
   try {
-    const slug = await resolveUniqueCustomPageSlug(requestedSlug || title, existing.id)
-    let storedFile = existing.storedFile
-    let originalName = existing.originalName
-    let size = existing.size
-
-    if (maybeFile instanceof File && maybeFile.size > 0) {
-      const storageResult = await saveCustomPageFile(maybeFile)
-      storedFile = storageResult.storedFile
-      originalName = storageResult.originalName
-      size = storageResult.size
-    }
-
-    const updated = await prisma.customPage.update({
-      where: { id },
-      data: {
-        title,
-        slug,
-        originalName,
-        storedFile,
-        size,
-        status: status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT',
-        folder,
-        tags: tagsRaw,
-      },
+    const formData = await request.formData()
+    const fields = customPageFieldsSchema.parse({
+      title: String(formData.get('title') || ''),
+      slug: String(formData.get('slug') || ''),
+      status: String(formData.get('status') || existing.status),
+      folder: String(formData.get('folder') || ''),
+      tags: parseTags(formData.get('tags')),
     })
-
-    if (storedFile !== existing.storedFile) {
-      await deleteCustomPageFile(existing.storedFile)
+    const slug = await resolveUniqueCustomPageSlug(fields.slug || fields.title, existing.id)
+    const maybeFile = formData.get('file')
+    let storage = {
+      storedFile: existing.storedFile,
+      originalName: existing.originalName,
+      size: existing.size,
+    }
+    if (maybeFile instanceof File && maybeFile.size > 0) {
+      storage = await saveCustomPageFile(maybeFile)
+      newStoredFile = storage.storedFile
+      quarantine = await quarantineCustomPageFile(existing.storedFile)
     }
 
-    revalidatePath('/admin/custom-pages')
-    revalidatePath(`/custom/${existing.slug}`)
-    revalidatePath(`/custom/${updated.slug}`)
+    let updated
+    try {
+      updated = await prisma.customPage.update({
+        where: { id },
+        data: {
+          ...fields,
+          slug,
+          tags: JSON.stringify(fields.tags),
+          originalName: storage.originalName,
+          storedFile: storage.storedFile,
+          size: storage.size,
+        },
+      })
+    } catch (error) {
+      if (quarantine) await quarantine.restore().catch(() => undefined)
+      if (newStoredFile) await deleteCustomPageFile(newStoredFile).catch(() => undefined)
+      throw error
+    }
 
+    if (quarantine) await quarantine.remove()
+    invalidatePublicCache(CACHE_TAGS.customPages)
     return NextResponse.json(serializeCustomPage(updated))
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to update custom page'
-    return NextResponse.json({ error: message }, { status: 400 })
+    if (error instanceof ZodError) return validationError(error)
+    if (error instanceof Error && /Only .html|valid HTML|smaller/.test(error.message)) {
+      return apiError(415, 'UNSUPPORTED_MEDIA_TYPE', error.message, { file: error.message })
+    }
+    return unknownApiError(error, 'Не удалось обновить custom page')
   }
 }
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await requireAdmin())) return apiError(401, 'UNAUTHORIZED', 'Требуется авторизация')
   const { id } = await params
   const existing = await prisma.customPage.findUnique({ where: { id } })
+  if (!existing) return apiError(404, 'NOT_FOUND', 'Страница не найдена')
 
-  if (!existing) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const quarantine = await quarantineCustomPageFile(existing.storedFile)
+  try {
+    await prisma.customPage.delete({ where: { id } })
+  } catch (error) {
+    await quarantine.restore().catch(() => undefined)
+    return unknownApiError(error, 'Не удалось удалить custom page')
   }
-
-  await prisma.customPage.delete({ where: { id } })
-  await deleteCustomPageFile(existing.storedFile)
-
-  revalidatePath('/admin/custom-pages')
-  revalidatePath(`/custom/${existing.slug}`)
-
+  await quarantine.remove()
+  invalidatePublicCache(CACHE_TAGS.customPages)
   return NextResponse.json({ success: true })
 }

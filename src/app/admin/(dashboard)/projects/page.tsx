@@ -1,9 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import ProjectList from '@/components/admin/ProjectList'
-
-export const dynamic = 'force-dynamic'
+import { connection } from 'next/server'
 
 export default async function ProjectsPage() {
+  await connection()
   const projects = await prisma.project.findMany({
     orderBy: { sortOrder: 'asc' },
   })

@@ -1,38 +1,36 @@
 import ProjectCard from './ProjectCard'
 
-interface Project {
-  id: string
-  title: string
-  slug: string
-  description: string
-  previewUrl: string | null
-  techStack: string[]
-  status: string
-  cardType: string
-  externalUrl: string | null
-}
-
 interface ProjectsGridProps {
-  projects: Project[]
+  projects: Array<{
+    id: string
+    title: string
+    slug: string
+    description: string
+    previewUrl: string | null
+    techStack: string[]
+    stage: string
+    cardType: string
+    externalUrl: string | null
+  }>
 }
 
 export default function ProjectsGrid({ projects }: ProjectsGridProps) {
   return (
-    <section id="projects">
-      <div>
-        <h2 className="text-3xl font-bold text-text-primary mb-10">Проекты</h2>
-        {projects.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <ProjectCard key={project.id} {...project} />
-            ))}
-          </div>
-        ) : (
-          <p className="text-text-secondary text-center py-12">
-            Проекты скоро появятся
-          </p>
-        )}
+    <section id="projects" aria-labelledby="projects-title" className="scroll-mt-28">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">То, что я собираю</p>
+          <h2 id="projects-title">Pet‑проекты</h2>
+        </div>
+        <span className="text-sm text-text-secondary">{projects.length} шт.</span>
       </div>
+      {projects.length ? (
+        <div className="divide-y divide-border-theme">
+          {projects.map((project) => <ProjectCard key={project.id} {...project} />)}
+        </div>
+      ) : (
+        <p className="empty-state">Проекты пока готовятся к публикации.</p>
+      )}
     </section>
   )
 }

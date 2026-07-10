@@ -1,13 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import CustomPageForm from '@/components/admin/CustomPageForm'
-
-export const dynamic = 'force-dynamic'
+import { connection } from 'next/server'
 
 export default async function NewCustomPage({
   searchParams,
 }: {
   searchParams: Promise<{ folder?: string }>
 }) {
+  await connection()
   const { folder: defaultFolder } = await searchParams
   const pages = await prisma.customPage.findMany({
     select: { folder: true, tags: true },

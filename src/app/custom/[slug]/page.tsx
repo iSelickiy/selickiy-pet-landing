@@ -1,56 +1,36 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
-import { readCustomPageFile } from '@/lib/customPageStorage'
+import { connection } from 'next/server'
+import { Suspense } from 'react'
+import { getPublishedCustomPage, getPublishedCustomPageDocument } from '@/lib/publicData'
 
-export const dynamic = 'force-dynamic'
-
-interface CustomPageRouteProps {
-  params: Promise<{ slug: string }>
-}
+interface CustomPageRouteProps { params: Promise<{ slug: string }> }
 
 export async function generateMetadata({ params }: CustomPageRouteProps): Promise<Metadata> {
   const { slug } = await params
-
-  const customPage = await prisma.customPage.findUnique({
-    where: { slug },
-    select: { title: true, status: true },
-  })
-
-  if (!customPage || customPage.status === 'DRAFT') {
-    return {
-      robots: {
-        index: false,
-        follow: false,
-      },
-    }
-  }
-
+  const customPage = await getPublishedCustomPage(slug)
   return {
-    title: customPage.title,
-    robots: {
-      index: false,
-      follow: false,
-    },
+    title: customPage?.title || 'Страница не найдена',
+    robots: { index: false, follow: false },
   }
 }
 
-export default async function CustomPageRoute({ params }: CustomPageRouteProps) {
+export default function CustomPageRoute({ params }: CustomPageRouteProps) {
+  return <Suspense fallback={<main className="fixed inset-0 bg-white" aria-label="Загрузка страницы" />}><CustomPageContent params={params} /></Suspense>
+}
+
+async function CustomPageContent({ params }: CustomPageRouteProps) {
+  await connection()
   const { slug } = await params
-
-  const customPage = await prisma.customPage.findUnique({ where: { slug } })
-  if (!customPage || customPage.status === 'DRAFT') {
-    notFound()
-  }
-
-  const html = await readCustomPageFile(customPage.storedFile)
-
+  const document = await getPublishedCustomPageDocument(slug)
+  if (!document) notFound()
   return (
     <iframe
-      title={customPage.title}
-      sandbox="allow-scripts"
-      srcDoc={html}
-      className="fixed inset-0 h-full w-full border-0"
+      title={document.page.title}
+      sandbox="allow-scripts allow-forms allow-popups"
+      referrerPolicy="no-referrer"
+      srcDoc={document.html}
+      className="fixed inset-0 h-full w-full border-0 bg-white"
     />
   )
 }

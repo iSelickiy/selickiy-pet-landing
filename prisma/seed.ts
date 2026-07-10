@@ -241,6 +241,8 @@ async function main() {
   const settings = [
     { key: 'firstName', value: 'Игорь' },
     { key: 'lastName', value: 'Селицкий' },
+    { key: 'tagline', value: 'Биздев — техноэнтузиаст' },
+    { key: 'introText', value: 'Развиваю продажи, запускаю новые направления и иногда собираю веб‑проекты просто потому, что могу.' },
     { key: 'avatarUrl', value: '' },
     { key: 'avatarMode', value: 'static' },
     { key: 'avatarDarkUrl', value: '' },

@@ -6,5 +6,7 @@
 - На сервере используются PostgreSQL, nginx, systemd и webhook deploy.
 - Prisma client генерируется в `src/generated/prisma`.
 - Runtime HTML pages должны жить в `CUSTOM_PAGES_DIR`, а не в git.
-- Серверный `deploy.sh` теперь очищает только `prisma/schema.prisma`, `src/lib/prisma.ts`, `prisma/seed.ts` перед `git reset`, затем восстанавливает их из backup.
+- Локально и на сервере используется единая PostgreSQL-схема; подмены Prisma-файлов больше нет.
+- Runtime uploads живут в `UPLOADS_DIR`, custom HTML — в `CUSTOM_PAGES_DIR`; оба каталога находятся вне git checkout.
+- Production app и webhook слушают только `127.0.0.1`; наружу их публикует nginx.
 - macOS metadata files `._*` считаются мусором и не должны попадать ни в git, ни на сервер.

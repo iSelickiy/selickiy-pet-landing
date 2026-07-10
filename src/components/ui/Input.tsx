@@ -19,13 +19,15 @@ export default function Input({ label, error, className = '', id, ...props }: In
       )}
       <input
         id={inputId}
-        className={`w-full rounded-lg border px-3 py-2 text-sm
-          focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent
+        aria-invalid={Boolean(error)}
+        aria-describedby={error && inputId ? `${inputId}-error` : undefined}
+        className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900
+          focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500
           ${error ? 'border-red-500' : 'border-gray-300'}
           ${className}`}
         {...props}
       />
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p id={inputId ? `${inputId}-error` : undefined} className="text-xs text-red-600">{error}</p>}
     </div>
   )
 }
