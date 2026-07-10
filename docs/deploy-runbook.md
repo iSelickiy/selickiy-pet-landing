@@ -2,19 +2,22 @@
 
 ## Перед первым выпуском модернизации
 
-1. Сделать ручной backup и проверить его:
+1. До изменения service-файлов сделать ручной backup текущих PostgreSQL, uploads и custom pages. Проверить dump через `pg_restore --list`, архивы через `gzip -t` и сохранить текущие nginx/systemd-конфиги.
 
-```bash
-sudo -u portfolio /var/www/portfolio/infra/backup.sh
-```
-
-2. Создать пользователя и каталоги:
+2. Создать пользователя, публичную группу uploads и каталоги:
 
 ```bash
 sudo useradd --system --home /var/lib/portfolio --shell /usr/sbin/nologin portfolio
+sudo groupadd --system portfolio-public
+sudo usermod -aG portfolio-public portfolio
+sudo usermod -aG portfolio-public www-data
 sudo install -d -o portfolio -g portfolio -m 0750 /var/lib/portfolio/{uploads,custom-pages,backups}
+sudo chgrp portfolio-public /var/lib/portfolio/uploads
+sudo chmod 2750 /var/lib/portfolio/uploads
 sudo chown -R portfolio:portfolio /var/www/portfolio
 ```
+
+Setgid на uploads сохраняет группу `portfolio-public` для новых файлов: приложение может писать, nginx — только читать.
 
 3. Установить env‑файлы по примерам из `infra/env/`:
 
@@ -53,8 +56,8 @@ Push в `main` вызывает подписанный webhook. `infra/deploy.sh
 3. синхронизирует checkout с `origin/main`;
 4. выполняет `npm ci` и полный verify;
 5. сохраняет предыдущую `.next`;
-6. собирает новую `.next`;
-7. применяет обратно совместимые миграции;
+6. применяет обратно совместимые миграции;
+7. собирает новую `.next` уже на актуальной схеме БД;
 8. пишет commit и builtAt в `/var/lib/portfolio/release.env`;
 9. рестартует только `portfolio.service`;
 10. проверяет `/api/health`.

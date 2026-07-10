@@ -32,7 +32,12 @@ git fetch --prune origin
 git reset --hard origin/main
 find "$APP_DIR" -name '._*' -delete
 
-install -d -m 0750 "$UPLOADS_DIR" "$CUSTOM_PAGES_DIR"
+install -d -m 2750 "$UPLOADS_DIR"
+install -d -m 0750 "$CUSTOM_PAGES_DIR"
+if getent group portfolio-public >/dev/null; then
+  chgrp portfolio-public "$UPLOADS_DIR"
+  chmod 2750 "$UPLOADS_DIR"
+fi
 if [ -d "$APP_DIR/public/uploads" ]; then
   cp -an "$APP_DIR/public/uploads/." "$UPLOADS_DIR/"
 fi
@@ -50,8 +55,8 @@ fi
 
 new_sha=$(git rev-parse HEAD)
 built_at=$(date --iso-8601=seconds)
-APP_GIT_SHA="$new_sha" APP_BUILT_AT="$built_at" NODE_OPTIONS="--max-old-space-size=768" npm run build
 npm run db:migrate
+APP_GIT_SHA="$new_sha" APP_BUILT_AT="$built_at" NODE_OPTIONS="--max-old-space-size=768" npm run build
 
 umask 077
 {
