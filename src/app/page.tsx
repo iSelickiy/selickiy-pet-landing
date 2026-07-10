@@ -1,113 +1,78 @@
-import { prisma } from '@/lib/prisma'
+import { ArrowDown, DotOutline } from '@phosphor-icons/react/dist/ssr'
 import Sidebar from '@/components/public/Sidebar'
 import Resume from '@/components/public/Resume'
 import ProjectsGrid from '@/components/public/ProjectsGrid'
+import Laboratory from '@/components/public/Laboratory'
 import Footer from '@/components/public/Footer'
+import { getPortfolioData } from '@/lib/publicData'
 
-export const dynamic = 'force-dynamic'
-
-type ContentSectionRow = { key: string; content: string }
-type ProjectRow = {
-  id: string
-  title: string
-  slug: string
-  description: string
-  previewUrl: string | null
-  techStack: string
-  status: string
-  cardType: string
-  externalUrl: string | null
-}
-type SettingRow = { key: string; value: string }
-type ContactButtonRow = { id: string; label: string; url: string; icon: string }
-type SocialLinkRow = { platform: string; url: string }
-type ExperienceRow = {
-  company: string
-  position: string
-  periodFrom: string
-  periodTo: string
-  description: string
-}
+const defaultIntro = 'Развиваю продажи, запускаю новые направления и иногда собираю веб‑проекты просто потому, что могу.'
 
 export default async function Home() {
-  let sections: ContentSectionRow[] = []
-  let projects: ProjectRow[] = []
-  let settingsRows: SettingRow[] = []
-  let contactButtons: ContactButtonRow[] = []
-  let socialLinks: SocialLinkRow[] = []
-  let experiences: ExperienceRow[] = []
-
-  try {
-    ;[sections, projects, settingsRows, contactButtons, socialLinks, experiences] = await Promise.all([
-      prisma.contentSection.findMany(),
-      prisma.project.findMany({
-        where: { status: 'PUBLISHED' },
-        orderBy: { sortOrder: 'asc' },
-      }),
-      prisma.siteSetting.findMany(),
-      prisma.contactButton.findMany({ orderBy: { sortOrder: 'asc' } }),
-      prisma.socialLink.findMany({ where: { enabled: true }, orderBy: { sortOrder: 'asc' } }),
-      prisma.resumeExperience.findMany({ orderBy: { sortOrder: 'asc' } }),
-    ])
-  } catch (error) {
+  const data = await getPortfolioData().catch((error) => {
     console.error('Failed to load public portfolio data', error)
-  }
-
-  const settings = Object.fromEntries(settingsRows.map(s => [s.key, s.value]))
-
-  const contentMap = Object.fromEntries(
-    sections.map((s) => [s.key, s.content])
-  )
-
-  const parsedProjects = projects.map((p) => ({
-    id: p.id,
-    title: p.title,
-    slug: p.slug,
-    description: p.description,
-    previewUrl: p.previewUrl,
-    techStack: JSON.parse(p.techStack) as string[],
-    status: p.status,
-    cardType: p.cardType,
-    externalUrl: p.externalUrl,
-  }))
-
-  const parsedExperiences = experiences.map((e) => ({
-    company: e.company,
-    position: e.position,
-    periodFrom: e.periodFrom,
-    periodTo: e.periodTo,
-    description: e.description,
-  }))
+    return {
+      settings: {} as Record<string, string>,
+      content: {} as Record<string, string>,
+      contactButtons: [],
+      socialLinks: [],
+      projects: [],
+      experiences: [],
+      customPages: [],
+    }
+  })
+  const settings = data.settings
+  const firstName = settings.firstName || 'Игорь'
+  const lastName = settings.lastName || 'Селицкий'
+  const tagline = settings.tagline || 'Биздев — техноэнтузиаст'
+  const intro = settings.introText || defaultIntro
 
   return (
-    <div className="min-h-screen">
+    <div id="about" className="min-h-screen">
+      <a href="#resume" className="skip-link">Перейти к резюме</a>
       <Sidebar
-        firstName={settings.firstName || ''}
-        lastName={settings.lastName || ''}
+        firstName={firstName}
+        lastName={lastName}
         avatarUrl={settings.avatarStatic || settings.avatarLight || settings.avatarUrl || null}
-        avatarMode={(settings.avatarMode as 'static' | 'dynamic') || 'static'}
         avatarDarkUrl={settings.avatarDark || settings.avatarDarkUrl || null}
-        aboutContent={settings.aboutContent || ''}
-        contactButtons={contactButtons}
-        socialLinks={socialLinks}
+        avatarMode={(settings.avatarMode as 'static' | 'dynamic') || 'static'}
+        tagline={tagline}
+        intro={intro}
+        socialLinks={data.socialLinks}
       />
 
-      {/* Main content area -- offset for sidebar on desktop, offset for header on mobile */}
-      <main className="lg:ml-72 xl:ml-80 pt-14 lg:pt-0 min-h-screen">
-        <div className="max-w-5xl mx-auto px-6 py-10 lg:py-16">
-          {/* Projects first */}
-          <ProjectsGrid projects={parsedProjects} />
+      <main className="min-h-screen lg:ml-72">
+        <nav className="public-tabs" aria-label="Навигация по странице">
+          <a href="#about">Обо мне</a>
+          <a href="#resume" className="active">Опыт</a>
+          <a href="#projects">Проекты</a>
+          <a href="#laboratory">Лаборатория</a>
+        </nav>
 
-          {/* Resume second */}
-          <div className="mt-16">
-            <Resume
-              experiences={parsedExperiences}
-              skillsContent={contentMap.skills ?? settings.skillsContent ?? ''}
-            />
+        <div className="mx-auto max-w-[1240px] px-5 pb-10 pt-8 sm:px-8 lg:px-10 lg:pt-10">
+          <header className="mb-9 hidden flex-col justify-between gap-5 border-b border-border-theme pb-7 sm:flex-row sm:items-end lg:flex">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                <DotOutline size={26} weight="fill" className="text-accent" aria-hidden="true" />
+                Привет! Рад видеть.
+              </p>
+              <h1 className="sr-only">{firstName} {lastName} — {tagline}</h1>
+            </div>
+            <a href="#resume" className="focus-ring inline-flex min-h-11 items-center gap-2 self-start rounded-xl border border-border-theme px-4 text-sm font-medium text-text-primary hover:border-accent/40 hover:text-accent sm:self-auto">
+              Начать с опыта <ArrowDown size={17} />
+            </a>
+          </header>
+
+          <div className="grid gap-12 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] xl:gap-14">
+            <Resume experiences={data.experiences} skillsContent={data.content.skills ?? settings.skillsContent ?? ''} />
+            <ProjectsGrid projects={data.projects} />
           </div>
-        </div>
 
-        <Footer />
+          <div className="mt-12">
+            <Laboratory pages={data.customPages} />
+          </div>
+          <Footer firstName={firstName} lastName={lastName} tagline={tagline} />
+        </div>
       </main>
     </div>
   )

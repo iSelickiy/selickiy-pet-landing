@@ -1,9 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import MediaLibrary from '@/components/admin/MediaLibrary'
-
-export const dynamic = 'force-dynamic'
+import { connection } from 'next/server'
 
 export default async function MediaPage() {
+  await connection()
   const files = await prisma.mediaFile.findMany({
     orderBy: { createdAt: 'desc' },
   })

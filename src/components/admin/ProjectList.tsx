@@ -1,193 +1,82 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
-import {
-  DndContext,
-  closestCenter,
-  DragEndEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { useState } from 'react'
+import { ArrowDown, ArrowUp, Eye, EyeSlash, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
 import Button from '@/components/ui/Button'
+import ConfirmDialog from '@/components/admin/ConfirmDialog'
+import PageHeader from '@/components/admin/PageHeader'
+import StatusMessage from '@/components/admin/StatusMessage'
+import { readApiError } from '@/lib/clientApi'
 
-interface Project {
-  id: string
-  title: string
-  status: 'DRAFT' | 'PUBLISHED'
-  cardType: 'EXTERNAL_LINK' | 'DETAIL_PAGE'
-  sortOrder: number
-  [key: string]: unknown
-}
+interface Project { id: string; title: string; slug: string; description: string; previewUrl: string | null; techStack: string[]; status: 'DRAFT' | 'PUBLISHED'; stage: string; cardType: string; externalUrl: string | null; sortOrder: number }
 
-interface ProjectListProps {
-  initialProjects: Project[]
-}
+export default function ProjectList({ initialProjects }: { initialProjects: Project[] }) {
+  const [projects, setProjects] = useState(initialProjects)
+  const [deleting, setDeleting] = useState<Project | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [status, setStatus] = useState<{ message: string; error?: boolean } | null>(null)
 
-export default function ProjectList({ initialProjects }: ProjectListProps) {
-  const [projects, setProjects] = useState<Project[]>(initialProjects)
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  )
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-
-    const oldIndex = projects.findIndex((p) => p.id === active.id)
-    const newIndex = projects.findIndex((p) => p.id === over.id)
-    const reordered = arrayMove(projects, oldIndex, newIndex)
-    setProjects(reordered)
-
-    await fetch('/api/projects/reorder', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: reordered.map((p) => p.id) }),
-    })
+  const move = async (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= projects.length) return
+    const previous = projects
+    const next = [...projects]
+    const [item] = next.splice(index, 1)
+    next.splice(target, 0, item)
+    setProjects(next); setStatus(null)
+    try {
+      const response = await fetch('/api/projects/reorder', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: next.map((project) => project.id) }) })
+      if (!response.ok) throw new Error(await readApiError(response, 'Не удалось изменить порядок'))
+    } catch (caught) { setProjects(previous); setStatus({ message: caught instanceof Error ? caught.message : 'Порядок восстановлен', error: true }) }
   }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Удалить проект?')) return
-    const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' })
-    if (res.ok) {
-      setProjects((prev) => prev.filter((p) => p.id !== id))
-    }
+  const togglePublish = async (project: Project) => {
+    setBusy(project.id); setStatus(null)
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: project.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED' }) })
+      if (!response.ok) throw new Error(await readApiError(response, 'Не удалось изменить статус'))
+      const updated = await response.json()
+      setProjects((current) => current.map((item) => item.id === project.id ? updated : item))
+    } catch (caught) { setStatus({ message: caught instanceof Error ? caught.message : 'Ошибка статуса', error: true }) }
+    finally { setBusy(null) }
   }
-
-  const handleTogglePublish = async (project: Project) => {
-    const newStatus = project.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED'
-    const res = await fetch(`/api/projects/${project.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    })
-    if (res.ok) {
-      setProjects((prev) =>
-        prev.map((p) => (p.id === project.id ? { ...p, status: newStatus } : p))
-      )
-    }
+  const remove = async () => {
+    if (!deleting) return
+    setBusy(deleting.id)
+    try {
+      const response = await fetch(`/api/projects/${deleting.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(await readApiError(response, 'Не удалось удалить проект'))
+      setProjects((current) => current.filter((item) => item.id !== deleting.id)); setDeleting(null)
+    } catch (caught) { setStatus({ message: caught instanceof Error ? caught.message : 'Ошибка удаления', error: true }) }
+    finally { setBusy(null) }
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Проекты</h1>
-        <Link href="/admin/projects/new">
-          <Button>Создать проект</Button>
-        </Link>
+      <PageHeader title="Проекты" description="Одна живая лента: готовые вещи, прототипы и идеи на паузе." action={<Link href="/admin/projects/new" className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"><Plus size={18} /> Новый проект</Link>} />
+      <StatusMessage message={status?.message || null} tone={status?.error ? 'error' : 'success'} />
+      <div className="mt-4 space-y-3">
+        {projects.map((project, index) => (
+          <article key={project.id} className="admin-card flex flex-col gap-4 md:flex-row md:items-center">
+            <div className="flex gap-1 md:flex-col">
+              <button type="button" onClick={() => void move(index, -1)} disabled={index === 0} className="focus-ring flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 disabled:opacity-30" aria-label={`Переместить ${project.title} выше`}><ArrowUp size={19} /></button>
+              <button type="button" onClick={() => void move(index, 1)} disabled={index === projects.length - 1} className="focus-ring flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 disabled:opacity-30" aria-label={`Переместить ${project.title} ниже`}><ArrowDown size={19} /></button>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold text-slate-950">{project.title}</h2><span className={`rounded-full px-2 py-1 text-xs font-medium ${project.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{project.status === 'PUBLISHED' ? 'Опубликован' : 'Черновик'}</span><span className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{project.stage}</span></div>
+              <p className="mt-1 line-clamp-2 text-sm text-slate-500">{project.description}</p>
+              <div className="mt-2 flex flex-wrap gap-1">{project.techStack.map((tech) => <span key={tech} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{tech}</span>)}</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void togglePublish(project)} disabled={busy === project.id} className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">{project.status === 'PUBLISHED' ? <EyeSlash size={18} /> : <Eye size={18} />}{project.status === 'PUBLISHED' ? 'В черновик' : 'Опубликовать'}</button>
+              <Link href={`/admin/projects/${project.id}`} className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"><PencilSimple size={18} /> Изменить</Link>
+              <Button type="button" variant="danger" onClick={() => setDeleting(project)} aria-label={`Удалить ${project.title}`}><Trash size={18} /></Button>
+            </div>
+          </article>
+        ))}
+        {!projects.length && <p className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">Проектов пока нет — можно начать с маленького эксперимента.</p>}
       </div>
-
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={projects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-          <div className="flex flex-col gap-2">
-            {projects.map((project) => (
-              <SortableItem
-                key={project.id}
-                project={project}
-                onDelete={handleDelete}
-                onTogglePublish={handleTogglePublish}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
-
-      {projects.length === 0 && (
-        <p className="text-gray-500 text-center py-12">Проектов пока нет</p>
-      )}
-    </div>
-  )
-}
-
-function SortableItem({
-  project,
-  onDelete,
-  onTogglePublish,
-}: {
-  project: Project
-  onDelete: (id: string) => void
-  onTogglePublish: (project: Project) => void
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: project.id,
-  })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-4 bg-white rounded-lg border border-gray-200 p-4"
-    >
-      {/* Drag handle */}
-      <button
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 px-1"
-        title="Перетащить"
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="5" cy="3" r="1.5" />
-          <circle cx="11" cy="3" r="1.5" />
-          <circle cx="5" cy="8" r="1.5" />
-          <circle cx="11" cy="8" r="1.5" />
-          <circle cx="5" cy="13" r="1.5" />
-          <circle cx="11" cy="13" r="1.5" />
-        </svg>
-      </button>
-
-      {/* Title */}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-gray-900 truncate">{project.title}</p>
-      </div>
-
-      {/* Card type indicator */}
-      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
-        {project.cardType === 'EXTERNAL_LINK' ? 'Ссылка' : 'Страница'}
-      </span>
-
-      {/* Status badge */}
-      <span
-        className={`text-xs font-medium px-2 py-1 rounded whitespace-nowrap ${
-          project.status === 'PUBLISHED'
-            ? 'bg-green-100 text-green-700'
-            : 'bg-yellow-100 text-yellow-700'
-        }`}
-      >
-        {project.status === 'PUBLISHED' ? 'Опубликован' : 'Черновик'}
-      </span>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => onTogglePublish(project)}
-        >
-          {project.status === 'PUBLISHED' ? 'Снять' : 'Опубликовать'}
-        </Button>
-        <Link href={`/admin/projects/${project.id}`}>
-          <Button variant="secondary" size="sm">
-            Редактировать
-          </Button>
-        </Link>
-        <Button variant="danger" size="sm" onClick={() => onDelete(project.id)}>
-          Удалить
-        </Button>
-      </div>
+      <ConfirmDialog open={Boolean(deleting)} title="Удалить проект?" description={deleting ? `«${deleting.title}» будет удалён без возможности восстановления.` : ''} busy={busy === deleting?.id} onClose={() => setDeleting(null)} onConfirm={() => void remove()} />
     </div>
   )
 }

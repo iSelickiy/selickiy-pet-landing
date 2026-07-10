@@ -1,30 +1,20 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
-import { authOptions } from '@/lib/auth'
+import { apiError, parseJson, requireAdmin, unknownApiError } from '@/lib/api'
+import { CACHE_TAGS, invalidatePublicCache } from '@/lib/cacheTags'
+import { reorderPayloadSchema } from '@/lib/validation'
 
 export async function PUT(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await requireAdmin())) return apiError(401, 'UNAUTHORIZED', 'Требуется авторизация')
+  try {
+    const { ids } = await parseJson(request, reorderPayloadSchema)
+    if (new Set(ids).size !== ids.length) {
+      return apiError(400, 'VALIDATION_ERROR', 'Список содержит дубликаты', { ids: 'Удалите повторяющиеся ID' })
+    }
+    await prisma.$transaction(ids.map((id, index) => prisma.resumeExperience.update({ where: { id }, data: { sortOrder: index } })))
+    invalidatePublicCache(CACHE_TAGS.resume)
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return unknownApiError(error, 'Не удалось изменить порядок резюме')
   }
-
-  const { ids } = await request.json()
-
-  if (!Array.isArray(ids)) {
-    return NextResponse.json({ error: 'ids must be an array' }, { status: 400 })
-  }
-
-  await Promise.all(
-    ids.map((id: string, index: number) =>
-      prisma.resumeExperience.update({
-        where: { id },
-        data: { sortOrder: index },
-      })
-    )
-  )
-
-  revalidatePath('/')
-  return NextResponse.json({ success: true })
 }

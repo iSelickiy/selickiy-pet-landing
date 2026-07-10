@@ -1,276 +1,75 @@
 'use client'
 
-import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { DragEvent, FormEvent, useMemo, useState } from 'react'
+import { ArrowSquareOut, FileHtml, UploadSimple } from '@phosphor-icons/react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import PageHeader from '@/components/admin/PageHeader'
+import StatusMessage from '@/components/admin/StatusMessage'
+import { readApiError } from '@/lib/clientApi'
 
-interface CustomPage {
-  id: string
-  title: string
-  slug: string
-  originalName: string
-  size: number
-  status: 'DRAFT' | 'PUBLISHED'
-  folder: string
-  tags: string
-}
+interface CustomPageData { id: string; title: string; slug: string; status: 'DRAFT' | 'PUBLISHED'; folder: string; tags: string; originalName: string; size: number }
 
-interface CustomPageFormProps {
-  initialData?: CustomPage
-  existingFolders?: string[]
-  existingTags?: string[]
-  defaultFolder?: string
-}
-
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-export default function CustomPageForm({
-  initialData,
-  existingFolders = [],
-  existingTags = [],
-  defaultFolder = '',
-}: CustomPageFormProps) {
+export default function CustomPageForm({ initialData, existingFolders = [], existingTags = [], defaultFolder = '' }: { initialData?: CustomPageData; existingFolders?: string[]; existingTags?: string[]; defaultFolder?: string }) {
   const router = useRouter()
-  const isEdit = Boolean(initialData)
-
+  const initialTags = useMemo(() => { try { return (JSON.parse(initialData?.tags || '[]') as string[]).join(', ') } catch { return '' } }, [initialData?.tags])
   const [title, setTitle] = useState(initialData?.title || '')
   const [slug, setSlug] = useState(initialData?.slug || '')
-  const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>(initialData?.status || 'DRAFT')
-  const [folder, setFolder] = useState(initialData ? initialData.folder : defaultFolder)
-  const [selectedTags, setSelectedTags] = useState<string[]>(() => {
-    if (initialData?.tags) {
-      try {
-        return JSON.parse(initialData.tags)
-      } catch {
-        return []
-      }
-    }
-    return []
-  })
-  const [newTag, setNewTag] = useState('')
+  const [status, setStatus] = useState(initialData?.status || 'DRAFT')
+  const [folder, setFolder] = useState(initialData?.folder || defaultFolder)
+  const [tags, setTags] = useState(initialTags)
   const [file, setFile] = useState<File | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
-  const publicUrl = slug ? `/custom/${slug}` : null
-
-  const availableTags = existingTags.filter((t) => !selectedTags.includes(t))
-
-  const toggleTag = (tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    )
+  const chooseFile = (candidate?: File) => {
+    if (!candidate) return
+    if (!candidate.name.toLowerCase().endsWith('.html') || candidate.size > 5 * 1024 * 1024) { setError('Нужен HTML-файл до 5 МБ'); return }
+    setFile(candidate); setDirty(true); setError(null)
   }
-
-  const addNewTag = () => {
-    const trimmed = newTag.trim()
-    if (trimmed && !selectedTags.includes(trimmed)) {
-      setSelectedTags((prev) => [...prev, trimmed])
-    }
-    setNewTag('')
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    setError('')
-
+  const drop = (event: DragEvent) => { event.preventDefault(); setDragging(false); chooseFile(event.dataTransfer.files[0]) }
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setSaving(true); setError(null)
     try {
-      const formData = new FormData()
-      formData.append('title', title)
-      formData.append('slug', slug)
-      formData.append('status', status)
-      formData.append('folder', folder)
-      formData.append('tags', JSON.stringify(selectedTags))
-      if (file) {
-        formData.append('file', file)
-      }
-
-      const res = await fetch(
-        isEdit ? `/api/custom-pages/${initialData?.id}` : '/api/custom-pages',
-        {
-          method: isEdit ? 'PUT' : 'POST',
-          body: formData,
-        }
-      )
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || 'Ошибка сохранения')
-      }
-
-      router.push('/admin/custom-pages')
-      router.refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка сохранения')
-    } finally {
-      setSaving(false)
-    }
+      if (!initialData && !file) throw new Error('Выберите HTML-файл')
+      const body = new FormData()
+      body.append('title', title); body.append('slug', slug); body.append('status', status); body.append('folder', folder)
+      body.append('tags', JSON.stringify(tags.split(',').map((tag) => tag.trim()).filter(Boolean)))
+      if (file) body.append('file', file)
+      const response = await fetch(initialData ? `/api/custom-pages/${initialData.id}` : '/api/custom-pages', { method: initialData ? 'PUT' : 'POST', body })
+      if (!response.ok) throw new Error(await readApiError(response, 'Не удалось сохранить страницу'))
+      setDirty(false); router.push('/admin/custom-pages'); router.refresh()
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Ошибка сохранения') }
+    finally { setSaving(false) }
   }
+  const mark = <T,>(setter: (value: T) => void) => (value: T) => { setter(value); setDirty(true) }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">
-        {isEdit ? 'Редактировать custom page' : 'Создать custom page'}
-      </h1>
-
-      {error && (
-        <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-        <Input
-          label="Название"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          placeholder="Например, Urals landing"
-        />
-
-        <Input
-          label="Slug"
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-          placeholder="Автогенерируется, но можно задать вручную"
-        />
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">Статус</label>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as 'DRAFT' | 'PUBLISHED')}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
-              focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-          >
-            <option value="DRAFT">Черновик</option>
-            <option value="PUBLISHED">Опубликован</option>
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">Папка</label>
-          <input
-            list="folder-list"
-            value={folder}
-            onChange={(e) => setFolder(e.target.value)}
-            placeholder="Выбери или введи название папки..."
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
-              focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-          />
-          <datalist id="folder-list">
-            {existingFolders.map((f) => (
-              <option key={f} value={f} />
-            ))}
-          </datalist>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-gray-700">Теги</label>
-
-          {selectedTags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {selectedTags.map((tag) => (
-                <span
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className="inline-flex items-center gap-1 text-xs bg-blue-600 text-white px-2.5 py-1 rounded-full cursor-pointer hover:bg-blue-700 transition-colors"
-                >
-                  {tag}
-                  <span className="ml-0.5">&times;</span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          {availableTags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              <span className="text-xs text-gray-400 mr-1 self-center">
-                {selectedTags.length ? 'Добавить:' : 'Выбери:'}
-              </span>
-              {availableTags.map((tag) => (
-                <span
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full cursor-pointer hover:bg-gray-200 transition-colors"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              addNewTag()
-            }}
-            className="flex gap-2"
-          >
-            <input
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              placeholder="Новый тег..."
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm
-                focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-            />
-            <button
-              type="submit"
-              className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-2 transition-colors"
-              disabled={!newTag.trim()}
-            >
-              Добавить
-            </button>
-          </form>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">
-            HTML-файл {isEdit ? '(можно заменить)' : ''}
+    <form onSubmit={submit} className="pb-24">
+      <PageHeader title={initialData ? 'Редактирование Custom Page' : 'Новая Custom Page'} description="Самостоятельный HTML‑артефакт: прототип, заметка, интерактив или что угодно ещё." action={initialData?.status === 'PUBLISHED' ? <Link href={`/custom/${initialData.slug}`} target="_blank" className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-medium text-slate-700"><ArrowSquareOut size={18} /> Открыть</Link> : undefined} />
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <section className="admin-card grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2"><Input label="Название" required value={title} onChange={(event) => mark(setTitle)(event.target.value)} /></div>
+          <Input label="Slug" value={slug} placeholder="создастся автоматически" onChange={(event) => mark(setSlug)(event.target.value)} />
+          <label className="text-sm font-medium text-slate-700">Статус<select value={status} onChange={(event) => mark(setStatus)(event.target.value as 'DRAFT' | 'PUBLISHED')} className="admin-select mt-1"><option value="DRAFT">Черновик</option><option value="PUBLISHED">Опубликована</option></select></label>
+          <div><Input label="Папка" value={folder} list="custom-page-folders" onChange={(event) => mark(setFolder)(event.target.value)} /><datalist id="custom-page-folders">{existingFolders.map((value) => <option key={value} value={value} />)}</datalist></div>
+          <div><Input label="Теги через запятую" value={tags} list="custom-page-tags" onChange={(event) => mark(setTags)(event.target.value)} /><datalist id="custom-page-tags">{existingTags.map((value) => <option key={value} value={value} />)}</datalist></div>
+        </section>
+        <section className="admin-card">
+          <h2 className="admin-card-title">HTML-файл</h2><p className="admin-card-description">До 5 МБ. SVG и другие форматы не принимаются.</p>
+          <label onDragEnter={() => setDragging(true)} onDragLeave={() => setDragging(false)} onDragOver={(event) => event.preventDefault()} onDrop={drop} className={`focus-ring mt-4 flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-5 text-center ${dragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50 hover:border-blue-400'}`}>
+            {file || initialData ? <FileHtml size={34} className="text-blue-600" /> : <UploadSimple size={34} className="text-slate-400" />}
+            <span className="mt-3 text-sm font-semibold text-slate-700">{file?.name || initialData?.originalName || 'Перетащи файл или выбери'}</span>
+            <span className="mt-1 text-xs text-slate-500">{file ? `${Math.round(file.size / 1024)} КБ` : 'Только .html'}</span>
+            <input type="file" accept=".html,text/html" className="sr-only" onChange={(event) => chooseFile(event.target.files?.[0])} />
           </label>
-          <input
-            type="file"
-            accept=".html,text/html"
-            required={!isEdit}
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
-              focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-          />
-          <p className="text-xs text-gray-500">
-            Поддерживается только одиночный `.html` файл. Скрипты будут выполняться в изолированном iframe.
-          </p>
-          {isEdit && initialData && (
-            <p className="text-xs text-gray-600">
-              Текущий файл: {initialData.originalName} ({formatSize(initialData.size)})
-            </p>
-          )}
-        </div>
-
-        {publicUrl && (
-          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-            Публичная ссылка: <span className="font-mono">{publicUrl}</span>
-          </div>
-        )}
+        </section>
       </div>
-
-      <div className="flex gap-3">
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => router.push('/admin/custom-pages')}
-        >
-          Отмена
-        </Button>
-      </div>
+      <div className="admin-savebar"><div><StatusMessage message={error} tone="error" />{dirty && !error && <p className="text-sm text-amber-700">Есть несохранённые изменения</p>}</div><div className="flex gap-2"><Button type="button" variant="secondary" onClick={() => router.push('/admin/custom-pages')}>Отмена</Button><Button type="submit" disabled={saving}>{saving ? 'Сохраняю…' : 'Сохранить страницу'}</Button></div></div>
     </form>
   )
 }

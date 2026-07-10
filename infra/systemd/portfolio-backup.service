@@ -1,0 +1,20 @@
+[Unit]
+Description=Backup selickiy.space PostgreSQL and runtime files
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=portfolio
+Group=portfolio
+WorkingDirectory=/var/www/portfolio
+EnvironmentFile=/var/www/portfolio/.env
+EnvironmentFile=-/var/lib/portfolio/release.env
+EnvironmentFile=-/etc/portfolio/backup.env
+ExecStart=/var/www/portfolio/infra/backup.sh
+StateDirectory=portfolio
+UMask=0027
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/portfolio

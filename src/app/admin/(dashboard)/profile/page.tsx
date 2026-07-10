@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import ProfileEditor from '@/components/admin/ProfileEditor'
-
-export const dynamic = 'force-dynamic'
+import PageHeader from '@/components/admin/PageHeader'
+import { connection } from 'next/server'
 
 export default async function ProfilePage() {
+  await connection()
   const settings = await prisma.siteSetting.findMany()
   const contactButtons = await prisma.contactButton.findMany({
     orderBy: { sortOrder: 'asc' },
@@ -19,7 +20,7 @@ export default async function ProfilePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Профиль</h1>
+      <PageHeader title="Профиль" description="Имя, позиционирование, контакты и то, как ты выглядишь на публичной странице." />
       <ProfileEditor
         settings={settingsMap}
         contactButtons={contactButtons}

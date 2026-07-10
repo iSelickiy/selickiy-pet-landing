@@ -1,416 +1,115 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import TiptapImage from '@tiptap/extension-image'
-import TiptapLink from '@tiptap/extension-link'
+import { FormEvent, useState } from 'react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import ImageUpload from '@/components/admin/ImageUpload'
+import PageHeader from '@/components/admin/PageHeader'
+import RichTextEditor from '@/components/admin/RichTextEditor'
+import StatusMessage from '@/components/admin/StatusMessage'
+import { readApiError, uploadImageWithProgress } from '@/lib/clientApi'
 
-interface Project {
+interface ProjectData {
   id: string
   title: string
+  slug: string
   description: string
+  previewUrl: string | null
   techStack: string[]
+  status: 'DRAFT' | 'PUBLISHED'
+  stage: string
   cardType: 'EXTERNAL_LINK' | 'DETAIL_PAGE'
   externalUrl: string | null
   pageContent: string | null
-  status: 'DRAFT' | 'PUBLISHED'
-  previewUrl: string | null
-  [key: string]: unknown
+  sortOrder?: number
 }
 
-interface ProjectFormProps {
-  initialData?: Project
-}
-
-const TECH_SUGGESTIONS = ['Next.js', 'React', 'TypeScript', 'Tailwind CSS', 'Python', 'PostgreSQL', 'Node.js', 'Docker', 'Redis', 'Chart.js', 'Prisma', 'DnD Kit', 'Telegram API', 'FastAPI']
-
-export default function ProjectForm({ initialData }: ProjectFormProps) {
+export default function ProjectForm({ initialData }: { initialData?: ProjectData }) {
   const router = useRouter()
-  const isEdit = !!initialData
-
-  const [title, setTitle] = useState(initialData?.title || '')
-  const [techInput, setTechInput] = useState('')
-  const [techTags, setTechTags] = useState<string[]>(initialData?.techStack || [])
-  const [cardType, setCardType] = useState<'EXTERNAL_LINK' | 'DETAIL_PAGE'>(
-    initialData?.cardType || 'EXTERNAL_LINK'
-  )
-  const [externalUrl, setExternalUrl] = useState(initialData?.externalUrl || '')
-  const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>(
-    initialData?.status || 'DRAFT'
-  )
-  const [previewUrl, setPreviewUrl] = useState(initialData?.previewUrl || '')
+  const [form, setForm] = useState({
+    title: initialData?.title || '',
+    slug: initialData?.slug || '',
+    description: initialData?.description || '',
+    previewUrl: initialData?.previewUrl || '',
+    techStack: initialData?.techStack.join(', ') || '',
+    status: initialData?.status || 'DRAFT',
+    stage: initialData?.stage || 'В процессе',
+    cardType: initialData?.cardType || 'EXTERNAL_LINK',
+    externalUrl: initialData?.externalUrl || '',
+    pageContent: initialData?.pageContent || '',
+  })
+  const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const update = (key: keyof typeof form, value: string) => { setForm((current) => ({ ...current, [key]: value })); setDirty(true) }
 
-  const descriptionEditor = useEditor({
-    extensions: [
-      StarterKit,
-      TiptapLink.configure({ openOnClick: false }),
-    ],
-    content: initialData?.description || '',
-    immediatelyRender: false,
-  })
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      TiptapImage,
-      TiptapLink.configure({ openOnClick: false }),
-    ],
-    content: initialData?.pageContent || '',
-    immediatelyRender: false,
-  })
-
-  const addTech = (tag: string) => {
-    const trimmed = tag.trim()
-    if (trimmed && !techTags.includes(trimmed)) {
-      setTechTags((prev) => [...prev, trimmed])
+  const uploadPreview = async (file: File) => {
+    setError(null)
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setError('Превью: JPEG, PNG, WebP, GIF или AVIF до 5 МБ'); return
     }
-  }
-
-  const removeTech = (tag: string) => {
-    setTechTags((prev) => prev.filter((t) => t !== tag))
-  }
-
-  const handleTechKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addTech(techInput)
-      setTechInput('')
-    }
-  }
-
-  const addImageToEditor = useCallback(() => {
-    const url = window.prompt('URL изображения:')
-    if (url && editor) {
-      editor.chain().focus().setImage({ src: url }).run()
-    }
-  }, [editor])
-
-  const addLinkToEditor = useCallback(() => {
-    if (!editor) return
-    const previousUrl = editor.getAttributes('link').href
-    const url = window.prompt('URL ссылки:', previousUrl)
-    if (url === null) return
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-    } else {
-      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-    }
-  }, [editor])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    setError('')
-
-    const body = {
-      title,
-      description: descriptionEditor?.getHTML() || '',
-      techStack: techTags,
-      cardType,
-      externalUrl: cardType === 'EXTERNAL_LINK' ? externalUrl : null,
-      pageContent: cardType === 'DETAIL_PAGE' ? editor?.getHTML() || '' : null,
-      status,
-      previewUrl: previewUrl || null,
-    }
-
     try {
-      const url = isEdit ? `/api/projects/${initialData.id}` : '/api/projects'
-      const method = isEdit ? 'PUT' : 'POST'
-      const res = await fetch(url, {
-        method,
+      setUploadProgress(0)
+      const result = await uploadImageWithProgress(file, setUploadProgress)
+      update('previewUrl', result.url)
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Ошибка загрузки') }
+    finally { setUploadProgress(null) }
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setSaving(true); setError(null)
+    try {
+      const response = await fetch(initialData ? `/api/projects/${initialData.id}` : '/api/projects', {
+        method: initialData ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...form,
+          techStack: form.techStack.split(',').map((item) => item.trim()).filter(Boolean),
+          previewUrl: form.previewUrl || null,
+          externalUrl: form.externalUrl || null,
+          pageContent: form.pageContent || null,
+        }),
       })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Ошибка сохранения')
-      }
-
-      router.push('/admin/projects')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка сохранения')
-    } finally {
-      setSaving(false)
-    }
+      if (!response.ok) throw new Error(await readApiError(response, 'Не удалось сохранить проект'))
+      setDirty(false); router.push('/admin/projects'); router.refresh()
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Ошибка сохранения') }
+    finally { setSaving(false) }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">
-        {isEdit ? 'Редактировать проект' : 'Создать проект'}
-      </h1>
-
-      {error && (
-        <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-        <Input
-          label="Название"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          placeholder="Название проекта"
-        />
-
-        {descriptionEditor && (
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">Описание</label>
-            <div className="flex flex-wrap gap-1 mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-              <ToolbarBtn
-                active={descriptionEditor.isActive('bold')}
-                onClick={() => descriptionEditor.chain().focus().toggleBold().run()}
-              >
-                B
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={descriptionEditor.isActive('italic')}
-                onClick={() => descriptionEditor.chain().focus().toggleItalic().run()}
-              >
-                <em>I</em>
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={descriptionEditor.isActive('bulletList')}
-                onClick={() => descriptionEditor.chain().focus().toggleBulletList().run()}
-              >
-                &bull;
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={descriptionEditor.isActive('orderedList')}
-                onClick={() => descriptionEditor.chain().focus().toggleOrderedList().run()}
-              >
-                1.
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={descriptionEditor.isActive('link')}
-                onClick={() => {
-                  const previousUrl = descriptionEditor.getAttributes('link').href
-                  const url = window.prompt('URL ссылки:', previousUrl)
-                  if (url === null) return
-                  if (url === '') {
-                    descriptionEditor.chain().focus().extendMarkRange('link').unsetLink().run()
-                  } else {
-                    descriptionEditor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-                  }
-                }}
-              >
-                Link
-              </ToolbarBtn>
-            </div>
-            <EditorContent
-              editor={descriptionEditor}
-              className="prose prose-sm max-w-none min-h-[100px] border border-gray-200 rounded-lg p-4
-                focus-within:ring-2 focus-within:ring-accent/50 focus-within:border-accent
-                [&_.tiptap]:outline-none [&_.tiptap]:min-h-[80px]"
-            />
-          </div>
-        )}
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">Технологии</label>
-          <input
-            value={techInput}
-            onChange={(e) => setTechInput(e.target.value)}
-            onKeyDown={handleTechKeyDown}
-            placeholder="Введите технологию и нажмите Enter"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
-              focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-          />
-          <div className="flex flex-wrap gap-1 mt-2">
-            {TECH_SUGGESTIONS.map((suggestion) => {
-              const alreadyAdded = techTags.includes(suggestion)
-              return (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => !alreadyAdded && addTech(suggestion)}
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                    alreadyAdded
-                      ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-default'
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-accent/10 hover:border-accent hover:text-accent cursor-pointer'
-                  }`}
-                >
-                  + {suggestion}
-                </button>
-              )
-            })}
-          </div>
-          {techTags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {techTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full flex items-center gap-1"
-                >
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => removeTech(tag)}
-                    className="text-gray-400 hover:text-red-500 ml-0.5"
-                  >
-                    &times;
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">Тип карточки</label>
-          <div className="flex gap-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="cardType"
-                checked={cardType === 'EXTERNAL_LINK'}
-                onChange={() => setCardType('EXTERNAL_LINK')}
-                className="accent-accent"
-              />
-              <span className="text-sm">Прямая ссылка</span>
+    <form onSubmit={submit} className="pb-24">
+      <PageHeader title={initialData ? 'Редактирование проекта' : 'Новый проект'} description="Можно публиковать и законченные продукты, и честные прототипы — статус объяснит контекст." />
+      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+        <div className="space-y-6">
+          <section className="admin-card grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2"><Input label="Название" required value={form.title} onChange={(event) => update('title', event.target.value)} /></div>
+            <Input label="Slug" value={form.slug} placeholder="создастся автоматически" onChange={(event) => update('slug', event.target.value)} />
+            <Input label="Стадия" value={form.stage} list="project-stages" onChange={(event) => update('stage', event.target.value)} />
+            <datalist id="project-stages"><option value="Живой" /><option value="В процессе" /><option value="Прототип" /><option value="Набросок" /><option value="На паузе" /><option value="Архив" /></datalist>
+            <label className="sm:col-span-2 text-sm font-medium text-slate-700">Короткое описание
+              <textarea required value={form.description} onChange={(event) => update('description', event.target.value)} rows={4} className="admin-textarea mt-1" />
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="cardType"
-                checked={cardType === 'DETAIL_PAGE'}
-                onChange={() => setCardType('DETAIL_PAGE')}
-                className="accent-accent"
-              />
-              <span className="text-sm">Страница описания</span>
-            </label>
-          </div>
+            <div className="sm:col-span-2"><Input label="Технологии через запятую" value={form.techStack} placeholder="Next.js, React, PostgreSQL" onChange={(event) => update('techStack', event.target.value)} /></div>
+          </section>
+          {form.cardType === 'DETAIL_PAGE' && <section className="admin-card"><RichTextEditor label="История создания и подробности" value={form.pageContent} onChange={(value) => update('pageContent', value)} minHeight={260} /></section>}
         </div>
-
-        {cardType === 'EXTERNAL_LINK' && (
-          <Input
-            label="Внешняя ссылка"
-            value={externalUrl}
-            onChange={(e) => setExternalUrl(e.target.value)}
-            placeholder="https://example.com"
-            type="url"
-          />
-        )}
-
-        {cardType === 'DETAIL_PAGE' && editor && (
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">Содержание страницы</label>
-            <div className="flex flex-wrap gap-1 mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-              <ToolbarBtn
-                active={editor.isActive('bold')}
-                onClick={() => editor.chain().focus().toggleBold().run()}
-              >
-                B
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={editor.isActive('italic')}
-                onClick={() => editor.chain().focus().toggleItalic().run()}
-              >
-                <em>I</em>
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={editor.isActive('heading', { level: 2 })}
-                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              >
-                H2
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={editor.isActive('heading', { level: 3 })}
-                onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-              >
-                H3
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={editor.isActive('bulletList')}
-                onClick={() => editor.chain().focus().toggleBulletList().run()}
-              >
-                &bull;
-              </ToolbarBtn>
-              <ToolbarBtn
-                active={editor.isActive('orderedList')}
-                onClick={() => editor.chain().focus().toggleOrderedList().run()}
-              >
-                1.
-              </ToolbarBtn>
-              <ToolbarBtn active={editor.isActive('link')} onClick={addLinkToEditor}>
-                Link
-              </ToolbarBtn>
-              <ToolbarBtn active={false} onClick={addImageToEditor}>
-                Img
-              </ToolbarBtn>
-            </div>
-            <EditorContent
-              editor={editor}
-              className="prose prose-sm max-w-none min-h-[200px] border border-gray-200 rounded-lg p-4
-                focus-within:ring-2 focus-within:ring-accent/50 focus-within:border-accent
-                [&_.tiptap]:outline-none [&_.tiptap]:min-h-[180px]"
-            />
-          </div>
-        )}
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">Статус</label>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as 'DRAFT' | 'PUBLISHED')}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
-              focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-          >
-            <option value="DRAFT">Черновик</option>
-            <option value="PUBLISHED">Опубликован</option>
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">Превью изображение</label>
-          <ImageUpload value={previewUrl} onChange={setPreviewUrl} />
-        </div>
+        <aside className="space-y-6">
+          <section className="admin-card space-y-4">
+            <label className="block text-sm font-medium text-slate-700">Публикация<select value={form.status} onChange={(event) => update('status', event.target.value)} className="admin-select mt-1"><option value="DRAFT">Черновик</option><option value="PUBLISHED">Опубликован</option></select></label>
+            <label className="block text-sm font-medium text-slate-700">Тип карточки<select value={form.cardType} onChange={(event) => update('cardType', event.target.value)} className="admin-select mt-1"><option value="EXTERNAL_LINK">Внешняя ссылка</option><option value="DETAIL_PAGE">Страница проекта</option></select></label>
+            {form.cardType === 'EXTERNAL_LINK' && <Input label="Ссылка на проект" value={form.externalUrl} placeholder="https://…" onChange={(event) => update('externalUrl', event.target.value)} />}
+          </section>
+          <section className="admin-card">
+            <h2 className="admin-card-title">Превью</h2>
+            <div className="relative mt-4 aspect-video overflow-hidden rounded-xl border border-slate-200 bg-slate-50">{form.previewUrl ? <Image src={form.previewUrl} alt="Превью проекта" fill sizes="340px" className="object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-slate-400">Изображение не выбрано</div>}</div>
+            <label className="focus-ring mt-4 inline-flex min-h-11 cursor-pointer items-center rounded-xl border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">Загрузить изображение<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadPreview(file) }} /></label>
+            {uploadProgress !== null && <p className="mt-2 text-xs text-slate-500">Загрузка: {uploadProgress}%</p>}
+          </section>
+        </aside>
       </div>
-
-      <div className="flex gap-3">
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => router.push('/admin/projects')}
-        >
-          Отмена
-        </Button>
-      </div>
+      <div className="admin-savebar"><div><StatusMessage message={error} tone="error" />{dirty && !error && <p className="text-sm text-amber-700">Есть несохранённые изменения</p>}</div><div className="flex gap-2"><Button type="button" variant="secondary" onClick={() => router.push('/admin/projects')}>Отмена</Button><Button type="submit" disabled={saving}>{saving ? 'Сохраняю…' : 'Сохранить проект'}</Button></div></div>
     </form>
-  )
-}
-
-function ToolbarBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-2 py-1 text-xs font-medium rounded transition-colors
-        ${active ? 'bg-accent text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}
-        border border-gray-200`}
-    >
-      {children}
-    </button>
   )
 }

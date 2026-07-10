@@ -45,8 +45,7 @@ next-env.d.ts
 
 /src/generated/prisma
 
-# uploads
+# runtime uploads and custom pages
 /public/uploads/*
-!/public/uploads/.gitkeep
 /runtime/*
 !/runtime/.gitkeep

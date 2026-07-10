@@ -1,63 +1,62 @@
+import Image from 'next/image'
 import Link from 'next/link'
+import { ArrowSquareOut, GithubLogo } from '@phosphor-icons/react/dist/ssr'
 
 interface ProjectCardProps {
-  id: string
   title: string
   slug: string
   description: string
   previewUrl: string | null
   techStack: string[]
-  status: string
+  stage: string
   cardType: string
   externalUrl: string | null
 }
 
-function CardContent({ title, description, previewUrl, techStack }: Pick<ProjectCardProps, 'title' | 'description' | 'previewUrl' | 'techStack'>) {
-  return (
+function stageTone(stage: string) {
+  const value = stage.toLowerCase()
+  if (/готов|жив|развива/.test(value)) return 'stage-live'
+  if (/пау|архив|заброш/.test(value)) return 'stage-paused'
+  if (/наброс|прототип/.test(value)) return 'stage-draft'
+  return 'stage-progress'
+}
+
+export default function ProjectCard(project: ProjectCardProps) {
+  const href = project.cardType === 'EXTERNAL_LINK' && project.externalUrl
+    ? project.externalUrl
+    : `/projects/${project.slug}`
+  const external = href.startsWith('http')
+  const content = (
     <>
-      <div className="aspect-video w-full overflow-hidden rounded-t-2xl">
-        {previewUrl ? (
-          <img src={previewUrl} alt={title} className="w-full h-full object-cover" />
+      <div className="relative aspect-[4/3] w-28 shrink-0 overflow-hidden rounded-xl bg-accent/6 sm:w-36">
+        {project.previewUrl ? (
+          <Image src={project.previewUrl} alt="" fill sizes="(max-width: 640px) 112px, 144px" className="object-cover" />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-accent/20 via-accent/10 to-transparent flex items-center justify-center">
-            <span className="text-4xl font-bold text-accent/30">{title.charAt(0)}</span>
+          <div className="flex h-full items-center justify-center text-3xl font-semibold text-accent/25" aria-hidden="true">
+            {project.title.charAt(0)}
           </div>
         )}
       </div>
-      <div className="p-5">
-        <h3 className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
-        <p className="text-sm text-text-secondary mb-4 line-clamp-3">{description}</p>
-        <div className="flex flex-wrap gap-1.5">
-          {techStack.map((tech) => (
-            <span
-              key={tech}
-              className="px-2.5 py-1 text-xs font-medium rounded-full bg-accent/10 text-accent"
-            >
-              {tech}
-            </span>
+      <div className="min-w-0 flex-1 py-1">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-base font-semibold leading-5 text-text-primary group-hover:text-accent">{project.title}</h3>
+          {external ? <ArrowSquareOut size={19} className="shrink-0 text-text-secondary" /> : <GithubLogo size={19} className="shrink-0 text-text-secondary" />}
+        </div>
+        <p className="mt-1 line-clamp-2 text-sm leading-5 text-text-secondary">{project.description}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className={`project-stage ${stageTone(project.stage)}`}>{project.stage}</span>
+          {project.techStack.slice(0, 3).map((tech) => (
+            <span key={tech} className="tech-chip">{tech}</span>
           ))}
         </div>
       </div>
     </>
   )
-}
 
-export default function ProjectCard(props: ProjectCardProps) {
-  const { title, slug, description, previewUrl, techStack, cardType, externalUrl } = props
-
-  const cardClasses = "group bg-card-bg rounded-2xl border border-border-theme shadow-sm hover:shadow-md hover:border-text-secondary/20 transition-all duration-200 overflow-hidden"
-
-  if (cardType === 'EXTERNAL_LINK' && externalUrl) {
-    return (
-      <a href={externalUrl} target="_blank" rel="noopener noreferrer" className={cardClasses}>
-        <CardContent title={title} description={description} previewUrl={previewUrl} techStack={techStack} />
-      </a>
-    )
-  }
-
-  return (
-    <Link href={`/projects/${slug}`} className={cardClasses}>
-      <CardContent title={title} description={description} previewUrl={previewUrl} techStack={techStack} />
-    </Link>
+  const className = 'project-row group focus-ring flex min-h-32 gap-4 rounded-xl py-4'
+  return external ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={className}>{content}</a>
+  ) : (
+    <Link href={href} className={className}>{content}</Link>
   )
 }

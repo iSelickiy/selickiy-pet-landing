@@ -1,38 +1,37 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
-import { authOptions } from '@/lib/auth'
+import { apiError, parseJson, requireAdmin, unknownApiError } from '@/lib/api'
+import { CACHE_TAGS, invalidatePublicCache } from '@/lib/cacheTags'
+import { normalizeExternalUrl } from '@/lib/sanitize'
+import { socialLinksPayloadSchema } from '@/lib/validation'
 
 export async function GET() {
-  const links = await prisma.socialLink.findMany({
-    orderBy: { sortOrder: 'asc' },
-  })
-  return NextResponse.json(links)
+  return NextResponse.json(await prisma.socialLink.findMany({ orderBy: { sortOrder: 'asc' } }))
 }
 
 export async function PUT(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const { links } = await request.json()
-
-  if (!Array.isArray(links)) {
-    return NextResponse.json({ error: 'links must be an array' }, { status: 400 })
-  }
-
-  const results = await Promise.all(
-    links.map((link: { platform: string; url: string; enabled: boolean }) =>
-      prisma.socialLink.upsert({
+  if (!(await requireAdmin())) return apiError(401, 'UNAUTHORIZED', 'Требуется авторизация')
+  try {
+    const { links } = await parseJson(request, socialLinksPayloadSchema)
+    const results = await prisma.$transaction(
+      links.map((link) => prisma.socialLink.upsert({
         where: { platform: link.platform },
-        update: { url: link.url, enabled: link.enabled },
-        create: { platform: link.platform, url: link.url, enabled: link.enabled },
-      })
+        update: {
+          url: link.url ? normalizeExternalUrl(link.url) : '',
+          enabled: link.enabled,
+          sortOrder: link.sortOrder,
+        },
+        create: {
+          platform: link.platform,
+          url: link.url ? normalizeExternalUrl(link.url) : '',
+          enabled: link.enabled,
+          sortOrder: link.sortOrder,
+        },
+      })),
     )
-  )
-
-  revalidatePath('/')
-  return NextResponse.json(results)
+    invalidatePublicCache(CACHE_TAGS.settings)
+    return NextResponse.json(results)
+  } catch (error) {
+    return unknownApiError(error, 'Не удалось сохранить социальные ссылки')
+  }
 }

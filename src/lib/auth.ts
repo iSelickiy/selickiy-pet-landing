@@ -11,8 +11,11 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt' },
   callbacks: {
     async signIn({ user }) {
-      const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim())
-      return allowedEmails.includes(user.email || '')
+      const allowedEmails = (process.env.ADMIN_EMAILS || '')
+        .split(',')
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean)
+      return allowedEmails.includes((user.email || '').toLowerCase())
     },
   },
   pages: {

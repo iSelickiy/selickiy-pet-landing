@@ -1,10 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { serializeCustomPage } from '@/lib/customPages'
 import CustomPageList from '@/components/admin/CustomPageList'
-
-export const dynamic = 'force-dynamic'
+import { connection } from 'next/server'
 
 export default async function CustomPagesPage() {
+  await connection()
   const customPages = await prisma.customPage.findMany({
     orderBy: { createdAt: 'desc' },
   })

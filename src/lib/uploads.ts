@@ -1,57 +1,102 @@
-import { writeFile, unlink, mkdir } from 'fs/promises'
-import path from 'path'
-import { prisma } from './prisma'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileTypeFromBuffer } from 'file-type'
+import { prisma } from '@/lib/prisma'
 
-const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads')
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+export const ALLOWED_UPLOAD_TYPES = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+  ['image/gif', 'gif'],
+  ['image/avif', 'avif'],
+])
 
-function sanitizeFilename(name: string): string {
-  return name
-    .replace(/[^a-zA-Z0-9._-]/g, '_')
-    .replace(/_{2,}/g, '_')
-    .substring(0, 200)
+export function getUploadsDir() {
+  return path.resolve(/* turbopackIgnore: true */ process.env.UPLOADS_DIR?.trim() || path.join(process.cwd(), 'runtime', 'uploads'))
 }
 
-export async function saveFile(file: File): Promise<{
-  filename: string
-  url: string
-  originalName: string
-  mimeType: string
-  size: number
-}> {
-  await mkdir(UPLOAD_DIR, { recursive: true })
-
-  const uniquePrefix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const sanitized = sanitizeFilename(file.name)
-  const filename = `${uniquePrefix}-${sanitized}`
-  const filepath = path.join(UPLOAD_DIR, filename)
-
-  const buffer = Buffer.from(await file.arrayBuffer())
-  await writeFile(filepath, buffer)
-
-  const url = `/uploads/${filename}`
-
-  await prisma.mediaFile.create({
-    data: {
-      filename,
-      originalName: file.name,
-      mimeType: file.type,
-      size: file.size,
-      url,
-    },
-  })
-
-  return { filename, url, originalName: file.name, mimeType: file.type, size: file.size }
-}
-
-export async function deleteFile(filename: string): Promise<void> {
-  const filepath = path.join(UPLOAD_DIR, filename)
-  if (!filepath.startsWith(UPLOAD_DIR + path.sep)) {
+export function resolveUploadPath(filename: string) {
+  if (filename !== path.basename(filename) || !/^[a-zA-Z0-9._-]+$/.test(filename)) {
     throw new Error('Invalid filename')
   }
-  try {
-    await unlink(filepath)
-  } catch {
-    // file may not exist on disk, continue with DB cleanup
+  const baseDir = getUploadsDir()
+  const filepath = path.resolve(/* turbopackIgnore: true */ baseDir, filename)
+  if (!filepath.startsWith(`${baseDir}${path.sep}`)) throw new Error('Invalid filename')
+  return { baseDir, filepath }
+}
+
+export async function validateImageFile(file: File) {
+  if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`Image must be smaller than ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`)
   }
-  await prisma.mediaFile.delete({ where: { filename } })
+
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const detected = await fileTypeFromBuffer(buffer)
+  if (!detected || !ALLOWED_UPLOAD_TYPES.has(detected.mime)) {
+    throw new Error('Only JPEG, PNG, WebP, GIF and AVIF images are allowed')
+  }
+
+  return { buffer, mimeType: detected.mime, extension: ALLOWED_UPLOAD_TYPES.get(detected.mime)! }
+}
+
+export async function saveFile(file: File) {
+  const { buffer, mimeType, extension } = await validateImageFile(file)
+  const baseDir = getUploadsDir()
+  await mkdir(baseDir, { recursive: true })
+
+  const filename = `${Date.now()}-${randomUUID()}.${extension}`
+  const { filepath } = resolveUploadPath(filename)
+  await writeFile(filepath, buffer, { flag: 'wx' })
+
+  try {
+    const record = await prisma.mediaFile.create({
+      data: {
+        filename,
+        originalName: file.name.slice(0, 240),
+        mimeType,
+        size: buffer.length,
+        url: `/uploads/${filename}`,
+      },
+    })
+    return record
+  } catch (error) {
+    await unlink(filepath).catch(() => undefined)
+    throw error
+  }
+}
+
+export async function readUpload(filename: string) {
+  const { filepath } = resolveUploadPath(filename)
+  const record = await prisma.mediaFile.findUnique({ where: { filename } })
+  if (!record) return null
+  const buffer = await readFile(/* turbopackIgnore: true */ filepath)
+  return { buffer, record }
+}
+
+export async function deleteFile(filename: string) {
+  const { filepath } = resolveUploadPath(filename)
+  const record = await prisma.mediaFile.findUnique({ where: { filename } })
+  if (!record) return false
+
+  const quarantine = `${filepath}.deleting-${randomUUID()}`
+  let moved = false
+  try {
+    await rename(filepath, quarantine)
+    moved = true
+  } catch (error) {
+    const code = error instanceof Error && 'code' in error ? error.code : undefined
+    if (code !== 'ENOENT') throw error
+  }
+
+  try {
+    await prisma.mediaFile.delete({ where: { filename } })
+  } catch (error) {
+    if (moved) await rename(quarantine, filepath).catch(() => undefined)
+    throw error
+  }
+
+  if (moved) await unlink(quarantine).catch((error) => console.error('Failed to remove quarantined upload', error))
+  return true
 }

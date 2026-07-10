@@ -2,14 +2,14 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { serializeCustomPage } from '@/lib/customPages'
 import CustomPageForm from '@/components/admin/CustomPageForm'
-
-export const dynamic = 'force-dynamic'
+import { connection } from 'next/server'
 
 export default async function EditCustomPagePage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  await connection()
   const { id } = await params
 
   const [customPage, allPages] = await Promise.all([

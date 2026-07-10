@@ -1,13 +1,23 @@
 [Unit]
 Description=GitHub Webhook Listener
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
-ExecStart=/usr/bin/node /var/www/webhook.js
+User=portfolio
+Group=portfolio
+WorkingDirectory=/var/www/portfolio
+ExecStart=/usr/bin/node /var/www/portfolio/infra/webhook.mjs
 Restart=on-failure
 RestartSec=5
+EnvironmentFile=/etc/portfolio/webhook.env
+EnvironmentFile=/var/www/portfolio/.env
+Environment=DEPLOY_SCRIPT=/var/www/portfolio/infra/deploy.sh
+PrivateTmp=true
+ProtectHome=true
+UMask=0027
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
 WantedBy=multi-user.target

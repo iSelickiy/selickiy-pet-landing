@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import ResumeEditor from '@/components/admin/ResumeEditor'
-
-export const dynamic = 'force-dynamic'
+import PageHeader from '@/components/admin/PageHeader'
+import { connection } from 'next/server'
 
 export default async function ResumePage() {
+  await connection()
   const experiences = await prisma.resumeExperience.findMany({
     orderBy: { sortOrder: 'asc' },
   })
@@ -14,7 +15,7 @@ export default async function ResumePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Резюме</h1>
+      <PageHeader title="Резюме" description="Хронология остаётся компактной на сайте, а подробности раскрываются по нажатию." />
       <ResumeEditor
         experiences={experiences}
         skillsContent={skillsSection?.content ?? ''}

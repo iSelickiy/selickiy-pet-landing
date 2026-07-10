@@ -1,89 +1,49 @@
 # Production Maintenance
 
-## Current Infra Snapshot
+## Ежедневно автоматически
 
-- App checkout: `/var/www/portfolio`
-- Deploy script: `/var/www/deploy.sh`
-- Webhook listener: `/var/www/webhook.js`
-- Runtime HTML storage: `/var/www/storage/custom-pages`
-- Swap: `1G` at `/swapfile`
+`portfolio-backup.timer` запускает `infra/backup.sh`. Каждый backup содержит:
 
-## Prisma
+- `postgresql.dump` в custom формате;
+- `uploads.tar.gz`;
+- `custom-pages.tar.gz`;
+- `SHA256SUMS`.
 
-Production currently keeps PostgreSQL-specific versions of:
+Скрипт проверяет `pg_restore --list`, `gzip -t` и `tar -tzf`, затем удаляет локальные копии старше 14 дней.
 
-- `prisma/schema.prisma`
-- `src/lib/prisma.ts`
-- `prisma/seed.ts`
-
-The deploy script backs them up before `git reset --hard origin/main`, then restores them and runs:
+## Еженедельно
 
 ```bash
-npm install --production=false
-npx prisma generate
-npx prisma migrate deploy
-npm run build
-systemctl restart portfolio.service
+systemctl list-timers portfolio-backup.timer
+systemctl status portfolio-backup.service
+find /var/lib/portfolio/backups -maxdepth 2 -type f -printf '%TY-%Tm-%Td %p\n' | tail
+curl -fsS https://selickiy.space/api/health
 ```
 
-## Deploy Safeguards
+Проверить свободное место, память/swap и отсутствие ошибок в journald.
 
-Production deploy now has extra protections because the server has only `1 CPU / 1 GB RAM`:
+## Ежемесячно
 
-- `webhook.js` uses `spawn(...)` instead of `execFile(...)`, so deploy output is streamed to journald instead of buffered in webhook process memory
-- only one deploy can run at a time
-- `deploy.sh` takes an exclusive lock via `flock`
-- before `next build`, the current `.next` is copied to a temporary backup
-- if build fails, `deploy.sh` restores the previous `.next` so a reboot does not leave the app without a production build
-- build runs with `NODE_OPTIONS=--max-old-space-size=512` to reduce memory spikes
+- тестово восстановить свежий PostgreSQL dump в отдельную БД;
+- распаковать uploads/custom pages во временный каталог;
+- проверить `certbot renew --dry-run`;
+- проверить `npm audit --omit=dev --audit-level=high`;
+- скопировать backup в offsite‑хранилище после его подключения.
 
-## Incident Note: 2026-04-04
+## Восстановление
 
-Observed failure mode:
+```bash
+pg_restore --clean --if-exists --dbname="$DATABASE_URL" postgresql.dump
+tar -xzf uploads.tar.gz -C /var/lib/portfolio
+tar -xzf custom-pages.tar.gz -C /var/lib/portfolio
+systemctl restart portfolio.service
+curl -fsS http://127.0.0.1:3000/api/health
+```
 
-- `webhook.service` was killed by the Linux OOM killer during deploy
-- `.next` was left in a partial state
-- after server reboot, `portfolio.service` could not start because Next.js could not find a valid production build
+Перед восстановлением production всегда создать отдельный свежий backup.
 
-Main symptoms in logs:
+## Runtime cleanup
 
-- missing SSR chunk files under `.next/server/chunks/ssr`
-- missing `.next/prerender-manifest.json`
-- `Could not find a production build in the '.next' directory`
-
-Immediate recovery steps that worked:
-
-1. move the broken `.next` aside
-2. run `npm run build` manually
-3. restart `portfolio.service`
-4. verify `localhost:3000` and `https://selickiy.space`
-
-## Runtime Storage
-
-- Custom HTML pages live in `CUSTOM_PAGES_DIR`
-- Current production path: `/var/www/storage/custom-pages`
-- This directory must stay outside the git checkout
-
-## Cleanup Rules
-
-- Files matching `._*` are junk macOS metadata files and can be safely removed from `/var/www/portfolio`
-- Do not delete runtime storage, `.env`, or PostgreSQL-specific Prisma files as part of generic cleanup
-
-## Verification Checklist
-
-After deploy or cleanup, verify:
-
-1. `systemctl is-active portfolio.service`
-2. `systemctl is-active webhook.service`
-3. `curl -I http://127.0.0.1:3000`
-4. `curl -I https://selickiy.space`
-5. `npx prisma migrate deploy` succeeds
-6. `https://selickiy.space/admin/custom-pages` redirects to `/admin/login`
-7. `https://selickiy.space/custom/<missing-slug>` returns `404`
-
-If the site fails after deploy:
-
-1. inspect `journalctl -u portfolio.service -n 100 --no-pager`
-2. inspect `journalctl -u webhook.service -n 100 --no-pager`
-3. check whether `.next` is incomplete or missing key manifests
-4. if needed, rebuild manually in `/var/www/portfolio` and restart `portfolio.service`
+- `._*` — мусор macOS, его можно удалять.
+- Нельзя чистить `/var/lib/portfolio/uploads`, `/var/lib/portfolio/custom-pages`, backups или env‑файлы вместе с checkout.
+- Orphan‑файлы не должны появляться: API компенсирует ошибки записи БД. При ручном cleanup сначала сверять записи `MediaFile`/`CustomPage`.
