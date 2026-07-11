@@ -2,7 +2,6 @@ import { ArrowDown, DotOutline } from '@phosphor-icons/react/dist/ssr'
 import Sidebar from '@/components/public/Sidebar'
 import Resume from '@/components/public/Resume'
 import ProjectsGrid from '@/components/public/ProjectsGrid'
-import Laboratory from '@/components/public/Laboratory'
 import Footer from '@/components/public/Footer'
 import { getPortfolioData } from '@/lib/publicData'
 
@@ -14,11 +13,9 @@ export default async function Home() {
     return {
       settings: {} as Record<string, string>,
       content: {} as Record<string, string>,
-      contactButtons: [],
       socialLinks: [],
       projects: [],
       experiences: [],
-      customPages: [],
     }
   })
   const settings = data.settings
@@ -46,7 +43,6 @@ export default async function Home() {
           <a href="#about">Обо мне</a>
           <a href="#resume" className="active">Опыт</a>
           <a href="#projects">Проекты</a>
-          <a href="#laboratory">Лаборатория</a>
         </nav>
 
         <div className="mx-auto max-w-[1240px] px-5 pb-10 pt-8 sm:px-8 lg:px-10 lg:pt-10">
@@ -68,9 +64,6 @@ export default async function Home() {
             <ProjectsGrid projects={data.projects} />
           </div>
 
-          <div className="mt-12">
-            <Laboratory pages={data.customPages} />
-          </div>
           <Footer firstName={firstName} lastName={lastName} tagline={tagline} />
         </div>
       </main>

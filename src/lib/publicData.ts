@@ -21,7 +21,6 @@ function developmentFallback() {
       introText: 'Развиваю продажи, запускаю новые направления и иногда собираю веб‑проекты просто потому, что могу.',
     } as Record<string, string>,
     content: {} as Record<string, string>,
-    contactButtons: [],
     socialLinks: [
       { id: 'dev-telegram', platform: 'telegram', url: 'https://t.me/iselickiy', enabled: true, sortOrder: 0 },
       { id: 'dev-email', platform: 'email', url: 'i.selickiy@yandex.ru', enabled: true, sortOrder: 1 },
@@ -37,10 +36,6 @@ function developmentFallback() {
       { id: 'dev-project-2', title: 'Чек‑лист запуска программы лояльности', slug: 'loyalty-program-launcher', description: 'Интерактивный список шагов от стратегии до запуска.', previewUrl: null, techStack: ['React', 'TypeScript'], status: 'PUBLISHED' as const, stage: 'В процессе', cardType: 'DETAIL_PAGE' as const, externalUrl: null, pageContent: null, sortOrder: 1, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') },
       { id: 'dev-project-3', title: 'Email Template Builder', slug: 'email-template-builder', description: 'Небольшой drag & drop конструктор email‑шаблонов.', previewUrl: null, techStack: ['Next.js', 'Tiptap'], status: 'PUBLISHED' as const, stage: 'Прототип', cardType: 'EXTERNAL_LINK' as const, externalUrl: 'https://github.com/selickiy', pageContent: null, sortOrder: 2, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') },
     ],
-    customPages: [
-      { id: 'dev-page-1', title: 'Заметка: как я считаю CRM‑эффект', slug: 'crm-note', originalName: 'crm-note.html', storedFile: '', size: 0, status: 'PUBLISHED' as const, folder: 'Заметки', tags: ['crm'], createdAt: new Date('2026-07-08'), updatedAt: new Date('2026-07-08') },
-      { id: 'dev-page-2', title: 'Прототип дашборда активности', slug: 'activity-prototype', originalName: 'activity.html', storedFile: '', size: 0, status: 'PUBLISHED' as const, folder: 'Прототипы', tags: ['ui'], createdAt: new Date('2026-07-07'), updatedAt: new Date('2026-07-07') },
-    ],
   }
 }
 
@@ -52,7 +47,6 @@ export async function getPortfolioData() {
     CACHE_TAGS.settings,
     CACHE_TAGS.projects,
     CACHE_TAGS.resume,
-    CACHE_TAGS.customPages,
   )
 
   let rows
@@ -61,10 +55,8 @@ export async function getPortfolioData() {
       prisma.contentSection.findMany(),
       prisma.project.findMany({ where: { status: 'PUBLISHED' }, orderBy: { sortOrder: 'asc' } }),
       prisma.siteSetting.findMany(),
-      prisma.contactButton.findMany({ orderBy: { sortOrder: 'asc' } }),
       prisma.socialLink.findMany({ where: { enabled: true }, orderBy: { sortOrder: 'asc' } }),
       prisma.resumeExperience.findMany({ orderBy: { sortOrder: 'asc' } }),
-      prisma.customPage.findMany({ where: { status: 'PUBLISHED' }, orderBy: { updatedAt: 'desc' }, take: 6 }),
     ] as const)
   } catch (error) {
     console.error('Failed to load cached portfolio data', error)
@@ -72,29 +64,22 @@ export async function getPortfolioData() {
     return {
       settings: {} as Record<string, string>,
       content: {} as Record<string, string>,
-      contactButtons: [],
       socialLinks: [],
       projects: [],
       experiences: [],
-      customPages: [],
     }
   }
-  const [sections, projects, settingsRows, contactButtons, socialLinks, experiences, customPages] = rows
+  const [sections, projects, settingsRows, socialLinks, experiences] = rows
 
   return {
     settings: Object.fromEntries(settingsRows.map(({ key, value }) => [key, value])),
     content: Object.fromEntries(sections.map(({ key, content }) => [key, content])),
-    contactButtons,
     socialLinks,
     projects: projects.map((project) => ({
       ...project,
       techStack: parseStringArray(project.techStack),
     })),
     experiences,
-    customPages: customPages.map((page) => ({
-      ...page,
-      tags: parseStringArray(page.tags),
-    })),
   }
 }
 

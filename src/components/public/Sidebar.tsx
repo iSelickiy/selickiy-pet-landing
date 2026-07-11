@@ -9,7 +9,6 @@ import {
   Briefcase,
   Code,
   EnvelopeSimple,
-  Flask,
   GithubLogo,
   House,
   InstagramLogo,
@@ -37,7 +36,6 @@ const navItems = [
   { href: '#about', label: 'Обо мне', icon: House },
   { href: '#resume', label: 'Опыт', icon: Briefcase },
   { href: '#projects', label: 'Проекты', icon: Code },
-  { href: '#laboratory', label: 'Лаборатория', icon: Flask },
 ]
 
 function normalizeHref(platform: string, value: string) {
