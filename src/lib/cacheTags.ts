@@ -1,4 +1,4 @@
-import { updateTag } from 'next/cache'
+import { revalidateTag } from 'next/cache'
 
 export const CACHE_TAGS = {
   portfolio: 'portfolio',
@@ -11,8 +11,8 @@ export const CACHE_TAGS = {
 export type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS]
 
 export function invalidatePublicCache(...tags: CacheTag[]) {
-  updateTag(CACHE_TAGS.portfolio)
+  revalidateTag(CACHE_TAGS.portfolio, { expire: 0 })
   for (const tag of new Set(tags)) {
-    updateTag(tag)
+    revalidateTag(tag, { expire: 0 })
   }
 }
