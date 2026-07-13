@@ -19,6 +19,7 @@ function developmentFallback() {
       lastName: 'Селицкий',
       tagline: 'Биздев — техноэнтузиаст',
       introText: 'Развиваю продажи, запускаю новые направления и иногда собираю веб‑проекты просто потому, что могу.',
+      avatarStatic: 'https://selickiy.space/uploads/1775317884834-aezb0e-2026-04-04_18.50.47.jpg',
     } as Record<string, string>,
     content: {} as Record<string, string>,
     socialLinks: [
@@ -32,6 +33,7 @@ function developmentFallback() {
       { id: 'dev-exp-3', company: 'VAPETIGER', position: 'Маркетинг и продажи', periodFrom: '2016', periodTo: '2021', description: '<p>Интернет‑магазин, маркетплейсы, партнёрства и отдел продаж.</p>', sortOrder: 2, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') },
     ],
     projects: [
+      { id: 'dev-project-0', title: 'Sales Pipeline Dashboard', slug: 'sales-pipeline-dashboard', description: 'Дашборд для визуализации воронки продаж и прогноза выручки.', previewUrl: null, techStack: ['React', 'Chart.js', 'PostgreSQL'], status: 'PUBLISHED' as const, stage: 'В процессе', cardType: 'DETAIL_PAGE' as const, externalUrl: null, pageContent: null, sortOrder: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') },
       { id: 'dev-project-1', title: 'CRM ROI Калькулятор', slug: 'crm-roi-calculator', description: 'Утилита для быстрой оценки окупаемости CRM‑платформы.', previewUrl: null, techStack: ['Next.js', 'React', 'Tailwind CSS'], status: 'PUBLISHED' as const, stage: 'Живой', cardType: 'DETAIL_PAGE' as const, externalUrl: null, pageContent: null, sortOrder: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') },
       { id: 'dev-project-2', title: 'Чек‑лист запуска программы лояльности', slug: 'loyalty-program-launcher', description: 'Интерактивный список шагов от стратегии до запуска.', previewUrl: null, techStack: ['React', 'TypeScript'], status: 'PUBLISHED' as const, stage: 'В процессе', cardType: 'DETAIL_PAGE' as const, externalUrl: null, pageContent: null, sortOrder: 1, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') },
       { id: 'dev-project-3', title: 'Email Template Builder', slug: 'email-template-builder', description: 'Небольшой drag & drop конструктор email‑шаблонов.', previewUrl: null, techStack: ['Next.js', 'Tiptap'], status: 'PUBLISHED' as const, stage: 'Прототип', cardType: 'EXTERNAL_LINK' as const, externalUrl: 'https://github.com/selickiy', pageContent: null, sortOrder: 2, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') },
@@ -59,8 +61,8 @@ export async function getPortfolioData() {
       prisma.resumeExperience.findMany({ orderBy: { sortOrder: 'asc' } }),
     ] as const)
   } catch (error) {
-    console.error('Failed to load cached portfolio data', error)
     if (process.env.NODE_ENV === 'development') return developmentFallback()
+    console.error('Failed to load cached portfolio data', error)
     return {
       settings: {} as Record<string, string>,
       content: {} as Record<string, string>,

@@ -107,8 +107,11 @@ export default function Sidebar(props: SidebarProps) {
         )}
       </div>
       <div>
-        <p className="text-xl font-bold tracking-tight text-white">{props.firstName} {props.lastName}</p>
-        <p className="mt-0.5 text-sm text-blue-300">{props.tagline}</p>
+        <p className="text-xl font-bold leading-tight tracking-tight text-white">
+          <span className="block">{props.firstName}</span>
+          <span className="block">{props.lastName}</span>
+        </p>
+        <p className="mt-2 text-sm leading-5 text-blue-300">{props.tagline}</p>
       </div>
     </>
   )
@@ -127,9 +130,9 @@ export default function Sidebar(props: SidebarProps) {
 
   return (
     <>
-      <aside className="sidebar-bg fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r border-white/10 px-7 py-8 lg:flex">
-        <div className="flex items-center gap-4">{identity}</div>
-        <p className="mt-5 text-sm leading-6 text-white/62">{props.intro}</p>
+      <aside className="sidebar-bg fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-white/10 px-8 py-8 lg:flex">
+        <div className="flex flex-col items-start gap-4">{identity}</div>
+        <p className="mt-5 text-[13px] leading-6 text-white/62">{props.intro}</p>
         <div className="mt-4 flex items-center gap-2 text-xs text-white/55">
           <span className="h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true" />
           На связи
@@ -139,7 +142,7 @@ export default function Sidebar(props: SidebarProps) {
           <ul className="space-y-1">
             {navItems.map(({ href, label, icon: Icon }) => (
               <li key={href}>
-                <a href={href} className="focus-ring flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-white/72 hover:bg-white/8 hover:text-white">
+                <a href={href} aria-current={href === '#about' ? 'page' : undefined} className={`side-nav-link focus-ring flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-white/72 hover:bg-white/8 hover:text-white ${href === '#about' ? 'active' : ''}`}>
                   <Icon size={19} />
                   {label}
                 </a>
@@ -164,7 +167,7 @@ export default function Sidebar(props: SidebarProps) {
               </a>
             ))}
           </div>
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-5 flex items-center justify-between">
             {mounted && themeButton}
             <Link href="/admin/login" className="focus-ring rounded-lg px-2 py-2 text-xs text-white/30 hover:text-white/65">Войти</Link>
           </div>
