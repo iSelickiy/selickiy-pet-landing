@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowLeft, ArrowSquareOut } from '@phosphor-icons/react/dist/ssr'
@@ -7,7 +8,19 @@ import { Suspense } from 'react'
 import RichContent from '@/components/ui/RichContent'
 import { getPublishedProject } from '@/lib/publicData'
 
-export default function ProjectPage({ params }: { params: Promise<{ slug: string }> }) {
+interface ProjectPageProps { params: Promise<{ slug: string }> }
+
+export async function generateMetadata({ params }: ProjectPageProps): Promise<Metadata> {
+  await connection()
+  const { slug } = await params
+  const project = await getPublishedProject(slug)
+  return {
+    title: project ? `${project.title} — Игорь Селицкий` : 'Проект не найден',
+    description: project?.description,
+  }
+}
+
+export default function ProjectPage({ params }: ProjectPageProps) {
   return <Suspense fallback={<main className="min-h-screen bg-bg-primary" aria-label="Загрузка проекта" />}><ProjectContent params={params} /></Suspense>
 }
 
