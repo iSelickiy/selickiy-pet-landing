@@ -76,12 +76,12 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: traefik
-      "traefik.http.routers.${TRAEFIK_ROUTER_NAME:?set TRAEFIK_ROUTER_NAME}.rule": ${TRAEFIK_RULE:?set TRAEFIK_RULE}
-      "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.entrypoints": ${TRAEFIK_ENTRYPOINT:-websecure}
-      "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.tls": "true"
-      "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.tls.certresolver": letsencrypt
-      "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.service": ${TRAEFIK_ROUTER_NAME}
-      "traefik.http.services.${TRAEFIK_ROUTER_NAME}.loadbalancer.server.port": "3000"
+      traefik.http.routers.selickiy-landing.rule: ${TRAEFIK_RULE:?set TRAEFIK_RULE}
+      traefik.http.routers.selickiy-landing.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.selickiy-landing.tls: "true"
+      traefik.http.routers.selickiy-landing.tls.certresolver: letsencrypt
+      traefik.http.routers.selickiy-landing.service: selickiy-landing
+      traefik.http.services.selickiy-landing.loadbalancer.server.port: "3000"
     security_opt:
       - no-new-privileges:true
     cap_drop:
