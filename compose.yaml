@@ -1,0 +1,100 @@
+name: selickiy-landing
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - internal
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    image: selickiy-landing-migrate:${APP_RELEASE_ID:-local}
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    logging: *default-logging
+
+  app:
+    build:
+      context: .
+      target: runner
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL}
+        APP_GIT_SHA: ${APP_GIT_SHA:-unknown}
+        APP_BUILT_AT: ${APP_BUILT_AT:-unknown}
+    image: selickiy-landing-app:${APP_RELEASE_ID:-local}
+    restart: unless-stopped
+    init: true
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?set NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?set GOOGLE_CLIENT_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:?set ADMIN_EMAILS}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL}
+      UPLOADS_DIR: /data/uploads
+      CUSTOM_PAGES_DIR: /data/custom-pages
+    volumes:
+      - uploads:/data/uploads
+      - custom_pages:/data/custom-pages
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - internal
+      - traefik
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: traefik
+      "traefik.http.routers.${TRAEFIK_ROUTER_NAME:?set TRAEFIK_ROUTER_NAME}.rule": ${TRAEFIK_RULE:?set TRAEFIK_RULE}
+      "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.entrypoints": ${TRAEFIK_ENTRYPOINT:-websecure}
+      "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.tls": "true"
+      "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.tls.certresolver": letsencrypt
+      "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.service": ${TRAEFIK_ROUTER_NAME}
+      "traefik.http.services.${TRAEFIK_ROUTER_NAME}.loadbalancer.server.port": "3000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+  uploads:
+  custom_pages:
+
+networks:
+  internal:
+  traefik:
+    external: true

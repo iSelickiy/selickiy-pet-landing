@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   poweredByHeader: false,
   compress: true,
+  output: 'standalone',
   productionBrowserSourceMaps: false,
   images: {
     remotePatterns: [{ protocol: 'https', hostname: '**' }],

@@ -1,0 +1,100 @@
+name: Deploy BIGVPS
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit SHA from main, or main for the latest commit
+        required: true
+        default: main
+        type: string
+
+concurrency:
+  group: bigvps-selickiy-landing
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: bigvps
+    env:
+      BIGVPS_HOST: ${{ secrets.BIGVPS_HOST }}
+      BIGVPS_USER: ${{ secrets.BIGVPS_USER }}
+      BIGVPS_SSH_PORT: ${{ secrets.BIGVPS_SSH_PORT }}
+      BIGVPS_DEPLOY_PATH: ${{ secrets.BIGVPS_DEPLOY_PATH }}
+      BIGVPS_SSH_KEY: ${{ secrets.BIGVPS_SSH_KEY }}
+      BIGVPS_SSH_HOST_KEY: ${{ secrets.BIGVPS_SSH_HOST_KEY }}
+      TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.sha }}
+    steps:
+      - name: Configure SSH
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$BIGVPS_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$BIGVPS_SSH_HOST_KEY" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Build and activate release on BIGVPS
+        env:
+          SSH_PORT: ${{ secrets.BIGVPS_SSH_PORT || '22' }}
+        run: |
+          set -Eeuo pipefail
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -p "$SSH_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            "$BIGVPS_USER@$BIGVPS_HOST" \
+            'bash -s' -- "$BIGVPS_DEPLOY_PATH" "${TARGET_SHA:-main}" <<'REMOTE'
+          set -Eeuo pipefail
+
+          deploy_root=$1
+          target_ref=$2
+          repo="$deploy_root/repo"
+          releases="$deploy_root/releases"
+
+          if [[ "$deploy_root" != /* || ! -d "$repo/.git" ]]; then
+            echo "DEPLOY_PATH must be absolute and contain a git clone at repo/" >&2
+            exit 2
+          fi
+          if [[ -e "$deploy_root/current" && ! -L "$deploy_root/current" ]]; then
+            echo "current must be a symlink or absent" >&2
+            exit 2
+          fi
+
+          git -C "$repo" fetch --prune origin main
+          if [ "$target_ref" = main ]; then
+            target_sha=$(git -C "$repo" rev-parse --verify 'origin/main^{commit}')
+          elif [[ "$target_ref" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            target_sha=$(git -C "$repo" rev-parse --verify "$target_ref^{commit}")
+          else
+            echo "Target must be main or a full 40-character commit SHA" >&2
+            exit 2
+          fi
+          if ! git -C "$repo" merge-base --is-ancestor "$target_sha" origin/main; then
+            echo "Target commit is not on origin/main" >&2
+            exit 2
+          fi
+
+          release_id="${target_sha:0:12}-$(date -u +%Y%m%d%H%M%S)"
+          release_dir="$releases/$release_id"
+          mkdir -p "$releases"
+          mkdir "$release_dir"
+          git -C "$repo" archive "$target_sha" | tar -x -C "$release_dir"
+          printf '%s\n' "$target_sha" > "$release_dir/.release-sha"
+          printf '%s\n' "$release_id" > "$release_dir/.release-id"
+
+          bash "$release_dir/infra/docker-deploy.sh" "$deploy_root" "$release_dir" "$target_sha"
+          REMOTE

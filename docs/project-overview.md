@@ -6,13 +6,14 @@
 
 ## Стек
 
-- Node.js 22 (`.nvmrc`, `engines`, CI)
-- Next.js 16.2 с App Router и Cache Components
+- Node.js 22 (`.nvmrc`, `engines`, CI, Docker)
+- Next.js 16.4 с App Router и Cache Components
 - React 19.2, TypeScript 5.9, Tailwind CSS 4.3
-- Prisma ORM 7.8 + PostgreSQL 16
+- Prisma ORM 7.10 + PostgreSQL 16
 - NextAuth 4 + Google OAuth
-- Tiptap 3.27, Zod, sanitize-html, file-type
-- nginx, systemd, GitHub webhook
+- Tiptap 3.33, Zod, sanitize-html, file-type
+- Целевой BIGVPS: Docker Compose и существующий Traefik
+- Старый VPS: nginx, systemd, GitHub webhook
 
 Локальная и production Prisma‑схема едины и используют PostgreSQL. Prisma Client генерируется в `src/generated/prisma`.
 
@@ -27,25 +28,21 @@
 
 ## Production
 
-- checkout: `/var/www/portfolio`
-- runtime state: `/var/lib/portfolio`
-- app: `127.0.0.1:3000`
-- webhook: `127.0.0.1:9000`
-- наружу открыт только nginx на 80/443
-- публичный webhook URL: `https://selickiy.space/deploy`
-- health: `GET /api/health`
+Текущий production на старом VPS использует checkout `/var/www/portfolio`, runtime state `/var/lib/portfolio`, app `127.0.0.1:3000`, webhook `127.0.0.1:9000` и nginx на 80/443. Его конфиги сохранены как legacy и не применяются к новому серверу.
 
-Webhook принимает только подписанные GitHub push‑события для `main`. Секрет хранится в `/etc/portfolio/webhook.env`, не в git. Приложение и webhook работают от пользователя `portfolio`.
+Целевой BIGVPS использует Docker Compose в `<DEPLOY_PATH>/releases`, symlink `<DEPLOY_PATH>/current` и env `<DEPLOY_PATH>/shared/.env`. Next.js не публикует host port и доступен через Traefik по отдельному hostname. PostgreSQL, uploads и custom pages находятся в named volumes; публичного порта PostgreSQL нет.
+
+Health: `GET /api/health`. Ответ 200 возможен только при успешном `SELECT 1` в PostgreSQL; также возвращаются `commit` и `builtAt`.
 
 ## Deploy
 
-`infra/deploy.sh` выполняет pre-deploy backup, `git reset` на `origin/main`, `npm ci`, Prisma generate, lint, typecheck, тесты, build, обратно совместимые миграции, restart и health smoke. Предыдущая `.next` сохраняется для rollback.
+Сохранённый CI выполняет generate, lint, typecheck, tests, build и audit. После успешного CI для `main` отдельный workflow собирает immutable release прямо на BIGVPS, запускает one-shot `prisma migrate deploy`, проверяет внутренний и HTTPS health и переключает `current`. При ошибке выполняется rollback предыдущего app image; volumes и миграции БД не откатываются.
 
-Старой подмены production Prisma‑файлов больше нет.
+На старом VPS `infra/deploy.sh` продолжает описывать legacy webhook deploy. Полный BIGVPS runbook и необходимые GitHub Secrets находятся в [Deploy runbook](deploy-runbook.md).
 
 ## Backup
 
-`portfolio-backup.timer` ежедневно сохраняет PostgreSQL, uploads и custom pages в `/var/lib/portfolio/backups`, проверяет архивы и держит 14 дней. Offsite‑копия остаётся отдельным операционным этапом.
+Существующий `portfolio-backup.timer` относится только к старому VPS. В BIGVPS deployment постоянные внешние backups, S3 и Restic не добавляются по решению владельца.
 
 ## Связанные документы
 

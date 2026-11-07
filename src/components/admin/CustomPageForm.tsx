@@ -14,7 +14,7 @@ interface CustomPageData { id: string; title: string; slug: string; status: 'DRA
 
 export default function CustomPageForm({ initialData, existingFolders = [], existingTags = [], defaultFolder = '' }: { initialData?: CustomPageData; existingFolders?: string[]; existingTags?: string[]; defaultFolder?: string }) {
   const router = useRouter()
-  const initialTags = useMemo(() => { try { return (JSON.parse(initialData?.tags || '[]') as string[]).join(', ') } catch { return '' } }, [initialData?.tags])
+  const initialTags = useMemo(() => { try { return (JSON.parse(initialData?.tags || '[]') as string[]).join(', ') } catch { return '' } }, [initialData])
   const [title, setTitle] = useState(initialData?.title || '')
   const [slug, setSlug] = useState(initialData?.slug || '')
   const [status, setStatus] = useState(initialData?.status || 'DRAFT')
@@ -28,7 +28,7 @@ export default function CustomPageForm({ initialData, existingFolders = [], exis
 
   const chooseFile = (candidate?: File) => {
     if (!candidate) return
-    if (!candidate.name.toLowerCase().endsWith('.html') || candidate.size > 5 * 1024 * 1024) { setError('Нужен HTML-файл до 5 МБ'); return }
+    if (!candidate.name.toLowerCase().endsWith('.html') || candidate.size > 5 * 1024 * 1024) { setFile(null); setError('Нужен HTML-файл до 5 МБ'); return }
     setFile(candidate); setDirty(true); setError(null)
   }
   const drop = (event: DragEvent) => { event.preventDefault(); setDragging(false); chooseFile(event.dataTransfer.files[0]) }

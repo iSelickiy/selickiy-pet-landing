@@ -22,22 +22,22 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "2.1.10",
-    "@prisma/adapter-pg": "7.8.0",
-    "@prisma/client": "7.8.0",
-    "@tiptap/extension-link": "3.27.3",
-    "@tiptap/pm": "3.27.3",
-    "@tiptap/react": "3.27.3",
-    "@tiptap/starter-kit": "3.27.3",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "@tiptap/extension-link": "3.33.0",
+    "@tiptap/pm": "3.33.0",
+    "@tiptap/react": "3.33.0",
+    "@tiptap/starter-kit": "3.33.0",
     "file-type": "22.0.1",
-    "next": "16.2.10",
-    "next-auth": "4.24.14",
+    "next": "16.4.5",
+    "next-auth": "4.24.15",
     "next-themes": "0.4.6",
     "pg": "8.22.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "sanitize-html": "2.17.5",
+    "sanitize-html": "2.18.1",
     "slugify": "1.6.9",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.2",
@@ -47,8 +47,8 @@
     "@types/react-dom": "19.2.3",
     "@types/sanitize-html": "2.16.1",
     "eslint": "9.39.3",
-    "eslint-config-next": "16.2.10",
-    "prisma": "7.8.0",
+    "eslint-config-next": "16.4.5",
+    "prisma": "7.10.1",
     "tailwindcss": "4.3.2",
     "tsx": "4.23.0",
     "typescript": "5.9.3",
@@ -56,9 +56,9 @@
   },
   "overrides": {
     "@hono/node-server": "1.19.13",
-    "fast-uri": "3.1.2",
+    "fast-uri": "3.1.9",
     "hono": "4.12.25",
-    "postcss": "8.5.16",
+    "postcss": "8.5.27",
     "uuid": "11.1.1"
   }
 }

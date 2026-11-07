@@ -1,6 +1,23 @@
 # Production Maintenance
 
-## Ежедневно автоматически
+## BIGVPS / Docker
+
+```bash
+export DEPLOY_PATH=/srv/selickiy-landing
+compose=(docker compose --project-name selickiy-landing --env-file "$DEPLOY_PATH/shared/.env" -f "$DEPLOY_PATH/current/compose.yaml")
+"${compose[@]}" ps
+"${compose[@]}" logs --tail=150 app migrate db
+curl -fsS https://selickiy.space/api/health
+docker volume inspect selickiy-landing_postgres_data selickiy-landing_uploads selickiy-landing_custom_pages
+```
+
+Проверять HTTP 200 и `database=ok`, отсутствие опубликованных портов `3000`/`5432`, свободное место для releases/images/volumes и доступность HTTPS. Не использовать `docker compose down -v` или `docker system prune --volumes`. Постоянные внешние backups, S3 и Restic на BIGVPS не настраиваются.
+
+Rollback кода выполняется через ручной **Deploy BIGVPS** с полным SHA из `main`. Схема БД и named volumes при этом не откатываются.
+
+## Старый VPS / legacy
+
+### Ежедневно автоматически
 
 `portfolio-backup.timer` запускает `infra/backup.sh`. Каждый backup содержит:
 
