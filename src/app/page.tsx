@@ -3,11 +3,18 @@ import Resume from '@/components/public/Resume'
 import ProjectsGrid from '@/components/public/ProjectsGrid'
 import Footer from '@/components/public/Footer'
 import RichContent from '@/components/ui/RichContent'
+import { connection } from 'next/server'
+import { Suspense } from 'react'
 import { getPortfolioData } from '@/lib/publicData'
 
 const defaultIntro = 'Развиваю продажи, запускаю новые направления и иногда собираю веб‑проекты просто потому, что могу.'
 
-export default async function Home() {
+export default function Home() {
+  return <Suspense fallback={<main className="min-h-screen bg-bg-primary" aria-label="Загрузка страницы" />}><HomeContent /></Suspense>
+}
+
+async function HomeContent() {
+  await connection()
   const data = await getPortfolioData().catch((error) => {
     console.error('Failed to load public portfolio data', error)
     return {
