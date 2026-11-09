@@ -34,6 +34,15 @@
 
 Health: `GET /api/health`. Ответ 200 возможен только при успешном `SELECT 1` в PostgreSQL; также возвращаются `commit` и `builtAt`.
 
+## Инфраструктурная админка
+
+- `/admin/obsidian` создаёт независимые CouchDB database/user для Self-hosted LiveSync и показывает занимаемое место. Setup URI, пароли, E2EE passphrase и recovery code выдаются только один раз и не сохраняются в PostgreSQL.
+- `/admin/server` показывает память, диск и контейнеры BIGVPS, позволяет запускать, останавливать и перезапускать незащищённые контейнеры без удаления данных.
+- Внутренний `bigvps-control` находится в `infra/control-plane`, на VPS развёрнут в `/opt/bigvps/apps/bigvps-control`. Он не имеет host-портов и Traefik-маршрутов, доступен только из Docker networks лендинга и Obsidian.
+- Next.js обращается к control-plane по bearer token из `CONTROL_PLANE_TOKEN`; публичные API дополнительно требуют NextAuth admin session, а мутации проверяют Origin.
+- `bigvps-control`, CouchDB, app/db/migrate лендинга и Traefik защищены от действий через UI. Docker socket не подключается к контейнеру лендинга.
+- Старый BIGVPS Admin остаётся отдельным fallback и этим deployment не управляется.
+
 ## Deploy
 
 Сохранённый CI выполняет generate, lint, typecheck, tests, build и audit. После успешного CI для `main` отдельный workflow собирает immutable release прямо на BIGVPS, запускает one-shot `prisma migrate deploy`, проверяет внутренний и HTTPS health и переключает `current`. При ошибке выполняется rollback предыдущего app image; volumes и миграции БД не откатываются.

@@ -5,7 +5,7 @@ import { Suspense } from 'react'
 import AdminShell from '@/components/admin/AdminShell'
 import { authOptions } from '@/lib/auth'
 
-export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+async function DashboardContent({ children }: { children: React.ReactNode }) {
   await connection()
   const session = await getServerSession(authOptions)
   if (!session) redirect('/admin/login')
@@ -16,4 +16,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </Suspense>
     </AdminShell>
   )
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<main className="sidebar-bg flex min-h-screen items-center justify-center text-white/65">Загрузка админки…</main>}><DashboardContent>{children}</DashboardContent></Suspense>
 }

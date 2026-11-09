@@ -28,6 +28,24 @@ docker network inspect traefik
 
 Заполнить `shared/.env`. Пароль PostgreSQL в `POSTGRES_PASSWORD` и `DATABASE_URL` должен совпадать; в URL его нужно URL-encode. Учётные данные PostgreSQL применяются при первой инициализации пустого volume, поэтому смена env сама по себе не меняет пароль существующей БД.
 
+Для вкладок Obsidian и Server задать `CONTROL_PLANE_URL=http://bigvps-control:3100` и тот же `CONTROL_PLANE_TOKEN`, что в `/opt/bigvps/apps/bigvps-control/.env`. Без обязательного token Compose не запустит app.
+
+### BIGVPS control-plane
+
+Версионируемый источник: `infra/control-plane`. Рабочий каталог на VPS: `/opt/bigvps/apps/bigvps-control`; `.env` с CouchDB admin credentials, token и Docker GID существует только на сервере и имеет режим `600`. Сервис подключается только к `selickiy-landing_internal` и `obsidian-sync_internal`, не публикует порт и не получает Traefik labels.
+
+После изменения `infra/control-plane` обновить его отдельно от app release:
+
+```bash
+cp -a /opt/bigvps/apps/selickiy-landing/current/infra/control-plane/. /opt/bigvps/apps/bigvps-control/
+cd /opt/bigvps/apps/bigvps-control
+docker compose --env-file .env up -d --build
+docker ps --filter name=bigvps-control
+docker exec -i bigvps-control node --input-type=module < scripts/smoke.mjs
+```
+
+Smoke создаёт и удаляет только временные `obsidian-qa-probe` и `vault-qa-probe`. Не использовать старый BIGVPS `deploy.sh stop`: он удаляет проект через `docker compose down` и каталог deployment. Управление из новой админки использует Docker start/stop/restart и сохраняет контейнеры и volumes.
+
 ### GitHub configuration
 
 Создать Actions environment `bigvps` и следующие Secrets:

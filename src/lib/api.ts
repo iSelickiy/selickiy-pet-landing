@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 
 export type ApiErrorCode =
   | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
   | 'VALIDATION_ERROR'
   | 'NOT_FOUND'
   | 'CONFLICT'
